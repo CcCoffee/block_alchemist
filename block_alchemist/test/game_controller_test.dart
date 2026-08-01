@@ -141,6 +141,98 @@ void main() {
     expect(c.allBlocks().any((b) => b.expiresAt != null), isFalse);
   });
 
+  test('灾害挑战：拖救灾元素化解灾害，得奖励并计入成就', () {
+    var nowMs = DateTime(2026, 1, 1).millisecondsSinceEpoch.toDouble();
+    final c = GameController(
+      GameStorage.instance,
+      now: () => DateTime.fromMillisecondsSinceEpoch(nowMs.toInt()),
+    );
+    // 解锁全部元素，方便放置任意救灾元素
+    for (final id in kElements.map((e) => e.id)) {
+      c.discover(id);
+    }
+    // 清空目标，避免救灾奖励触发目标完成影响分数断言
+    c.goals = <Goal>[];
+    c.spawnDisaster();
+    final disaster = c.allBlocks().firstWhere((b) => b.expiresAt != null);
+    final cureId = kDisasterCures[disaster.elementId]!;
+    final cell = c.randomEmptyCell()!;
+    c.placeElement(cureId, cell.$1, cell.$2);
+    final cureBlock = c.get(cell.$1, cell.$2)!;
+    final scoreBefore = c.score;
+
+    c.performMerge(cureBlock, disaster);
+
+    expect(
+      c.allBlocks().any((b) => b.elementId == disaster.elementId),
+      isFalse,
+      reason: '灾害应被化解',
+    );
+    expect(
+      c.allBlocks().any((b) => b.elementId == cureId),
+      isFalse,
+      reason: '救灾元素应被消耗',
+    );
+    expect(c.score, scoreBefore + kCureReward);
+    expect(c.savedDisasters, 1);
+  });
+
+  test('灾害挑战：未化解爆发时扣分，且分数不会扣成负数', () {
+    var nowMs = DateTime(2026, 1, 1).millisecondsSinceEpoch.toDouble();
+    final c = GameController(
+      GameStorage.instance,
+      now: () => DateTime.fromMillisecondsSinceEpoch(nowMs.toInt()),
+    );
+    for (final id in kElements.map((e) => e.id).take(16)) {
+      c.discover(id);
+    }
+    c.spawnDisaster();
+    c.score = 100;
+    final disaster = c.allBlocks().firstWhere((b) => b.expiresAt != null);
+    disaster.expiresAt = nowMs - 1;
+    c.tick(0.1);
+    expect(c.score, 100 - kDisasterPenalty);
+
+    // 分数为 0 时爆发不会扣成负数
+    c.score = 0;
+    c.spawnDisaster();
+    final d2 = c.allBlocks().firstWhere((b) => b.expiresAt != null);
+    d2.expiresAt = nowMs - 1;
+    c.tick(0.1);
+    expect(c.score, 0);
+  });
+
+  test('世界目标按等级解锁：新目标不超过当前世界等级', () {
+    final c = GameController(GameStorage.instance);
+    expect(c.unlockedGoalTier, 1);
+    for (final g in c.goals) {
+      expect(g.tier, lessThanOrEqualTo(c.unlockedGoalTier));
+    }
+
+    // 推进到最高世界等级
+    for (final id in kElements.map((e) => e.id)) {
+      c.discover(id);
+    }
+    // 世界等级在合成后更新（与游戏内行为一致）
+    final a = c.randomEmptyCell()!;
+    final b = c.randomEmptyCell()!;
+    c.placeElement('earth', a.$1, a.$2);
+    c.placeElement('earth', b.$1, b.$2);
+    c.performMerge(c.get(a.$1, a.$2)!, c.get(b.$1, b.$2)!);
+    c.tick(0.5);
+    expect(c.unlockedGoalTier, 4);
+
+    // 完成一个目标后，新目标等级仍不能超过解锁等级
+    c.goals = <Goal>[const Goal(kind: 'merge', target: 1, reward: 50, tier: 4)];
+    final c1 = c.randomEmptyCell()!;
+    final c2 = c.randomEmptyCell()!;
+    c.placeElement('earth', c1.$1, c1.$2);
+    c.placeElement('earth', c2.$1, c2.$2);
+    c.performMerge(c.get(c1.$1, c1.$2)!, c.get(c2.$1, c2.$2)!);
+    c.tick(0.5);
+    expect(c.goals.single.tier, lessThanOrEqualTo(c.unlockedGoalTier));
+  });
+
   test('存档与读档：图鉴、分数、地图都能恢复', () {
     final c = GameController(GameStorage.instance);
     final fire = c.allBlocks().firstWhere((b) => b.elementId == 'fire');

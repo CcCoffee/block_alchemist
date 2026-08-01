@@ -48,6 +48,31 @@ function roundRectPath(ctx, x, y, w, h, r) {
 const SAVE_KEY = 'alchemist_save_v1';
 const MUTE_KEY = 'alchemist_muted';
 const DISASTER_LIFETIME = 75000; // 灾害方块在地图上的存活时间
+const CURE_REWARD = 150;        // 救灾成功奖励
+const DISASTER_PENALTY = 50;    // 灾害未被化解、自然爆发时的扣分
+
+/**
+ * 救世配方：灾害元素 -> 救灾元素。
+ * 拖动救灾元素到灾害方块上即可化解；救灾元素通常由合理配方合成
+ * （如 火灾/野火 ← 泥（水+土），龙卷风 ← 大楼（房子+石头））。
+ */
+const DISASTER_CURES = {
+  storm: 'wall',           // 风暴 → 城墙（石头+石头）
+  drought: 'rain',         // 干旱 → 雨
+  flood: 'sand',           // 洪水 → 沙（沙袋筑堤）
+  volcano: 'water',        // 火山 → 水（冷却岩浆）
+  earthquake: 'iron',      // 地震 → 铁（加固支撑）
+  tornado: 'building',     // 龙卷风 → 大楼（房子+石头避难所）
+  blizzard: 'fire',        // 暴风雪 → 火（取暖）
+  wildfire: 'mud',         // 野火 → 泥（水+土泥浆）
+  meteor: 'shield',        // 陨石 → 盾（防护）
+  tsunami: 'mountain',     // 海啸 → 山（山崖挡浪）
+  typhoon: 'house',        // 台风 → 房子（坚固住所）
+  avalanche: 'tree',       // 雪崩 → 树（森林护坡）
+  firedisaster: 'mud',     // 火灾 → 泥（水+土泥浆）
+  thunderstorm: 'iron',    // 雷暴 → 铁（引雷入地）
+  coldwave: 'campfire',    // 寒潮 → 篝火（取暖）
+};
 
 /** 世界等级：探索数量门槛 + 地图尺寸（世界成长） */
 const WORLD_LEVELS = [
@@ -97,33 +122,46 @@ const storage = {
 /* ------------------------------ 世界目标 ------------------------------ */
 
 /** 目标模板：kind 支持 type（发现某类型元素）/ element（发现指定元素）/
- *  merge（合成次数）/ score（累计积分）。reward 为目标完成奖励。 */
+ *  merge（合成次数）/ score（累计积分）。reward 为目标完成奖励。
+ *  tier 为目标等级：1 自然篇（开局可用）→ 2 文明篇 → 3 科技篇 → 4 神话篇，
+ *  随世界等级逐步解锁，避免新手一开局就收到"发现火箭"这种遥远目标。 */
 const GOAL_TEMPLATES = [
-  { kind: 'type',   type: '动物', target: 3,  reward: 80 },
-  { kind: 'type',   type: '植物', target: 4,  reward: 80 },
-  { kind: 'type',   type: '工具', target: 2,  reward: 80 },
-  { kind: 'type',   type: '建筑', target: 3,  reward: 100 },
-  { kind: 'type',   type: '科技', target: 2,  reward: 120 },
-  { kind: 'type',   type: '文明', target: 2,  reward: 120 },
-  { kind: 'type',   type: '食物', target: 4,  reward: 80 },
-  { kind: 'type',   type: '神话', target: 2,  reward: 150 },
-  { kind: 'element', elementId: 'rainbow',     target: 1, reward: 120 },
-  { kind: 'element', elementId: 'city',        target: 1, reward: 150 },
-  { kind: 'element', elementId: 'electricity', target: 1, reward: 100 },
-  { kind: 'element', elementId: 'robot',       target: 1, reward: 150 },
-  { kind: 'element', elementId: 'airplane',    target: 1, reward: 120 },
-  { kind: 'element', elementId: 'library',     target: 1, reward: 120 },
-  { kind: 'element', elementId: 'rocket',      target: 1, reward: 180 },
-  { kind: 'element', elementId: 'dragon',      target: 1, reward: 200 },
-  { kind: 'element', elementId: 'phoenix',     target: 1, reward: 200 },
-  { kind: 'element', elementId: 'mermaid',     target: 1, reward: 150 },
-  { kind: 'merge', target: 10, reward: 100 },
-  { kind: 'merge', target: 30, reward: 150 },
-  { kind: 'merge', target: 60, reward: 250 },
-  { kind: 'score', target: 500,  reward: 100 },
-  { kind: 'score', target: 2000, reward: 200 },
-  { kind: 'score', target: 5000, reward: 400 },
+  { kind: 'type',   type: '动物', target: 3,  reward: 80,  tier: 1 },
+  { kind: 'type',   type: '植物', target: 4,  reward: 80,  tier: 1 },
+  { kind: 'type',   type: '食物', target: 4,  reward: 80,  tier: 1 },
+  { kind: 'type',   type: '工具', target: 2,  reward: 80,  tier: 1 },
+  { kind: 'type',   type: '建筑', target: 3,  reward: 100, tier: 2 },
+  { kind: 'type',   type: '文明', target: 2,  reward: 120, tier: 2 },
+  { kind: 'type',   type: '科技', target: 2,  reward: 120, tier: 2 },
+  { kind: 'type',   type: '神话', target: 2,  reward: 150, tier: 3 },
+  { kind: 'element', elementId: 'electricity', target: 1, reward: 100, tier: 2 },
+  { kind: 'element', elementId: 'rainbow',     target: 1, reward: 120, tier: 2 },
+  { kind: 'element', elementId: 'city',        target: 1, reward: 150, tier: 3 },
+  { kind: 'element', elementId: 'airplane',    target: 1, reward: 120, tier: 3 },
+  { kind: 'element', elementId: 'library',     target: 1, reward: 120, tier: 3 },
+  { kind: 'element', elementId: 'mermaid',     target: 1, reward: 150, tier: 3 },
+  { kind: 'element', elementId: 'robot',       target: 1, reward: 150, tier: 3 },
+  { kind: 'element', elementId: 'rocket',      target: 1, reward: 180, tier: 4 },
+  { kind: 'element', elementId: 'dragon',      target: 1, reward: 200, tier: 4 },
+  { kind: 'element', elementId: 'phoenix',     target: 1, reward: 200, tier: 4 },
+  { kind: 'merge', target: 10, reward: 100, tier: 1 },
+  { kind: 'merge', target: 30, reward: 150, tier: 2 },
+  { kind: 'merge', target: 60, reward: 250, tier: 3 },
+  { kind: 'score', target: 500,  reward: 100, tier: 1 },
+  { kind: 'score', target: 2000, reward: 200, tier: 2 },
+  { kind: 'score', target: 5000, reward: 400, tier: 3 },
 ];
+
+/** 目标等级名称（随世界等级解锁的"篇章"） */
+const GOAL_STAGE_NAMES = { 1: '自然', 2: '文明', 3: '科技', 4: '神话' };
+
+/** 当前世界等级（worldIndex 0-7）解锁到的目标等级 */
+function goalTierOf(worldIndex) {
+  if (worldIndex >= 6) return 4;
+  if (worldIndex >= 4) return 3;
+  if (worldIndex >= 2) return 2;
+  return 1;
+}
 
 /** 目标卡片图标（按类型 / 种类） */
 const GOAL_TYPE_ICONS = {
@@ -196,9 +234,12 @@ function goalFeasible(t, discoveredSet) {
 }
 
 /** 生成一组新目标（默认 3 个）；excludeKeys 用于换掉已完成目标时不重复 */
-function makeGoals(discoveredSet, excludeKeys = [], count = 3) {
+function makeGoals(discoveredSet, excludeKeys = [], count = 3, unlockedTier = 1) {
   const pool = shuffle(GOAL_TEMPLATES).filter(
-    (t) => goalFeasible(t, discoveredSet) && !excludeKeys.includes(templateKey(t)),
+    (t) =>
+      t.tier <= unlockedTier &&
+      goalFeasible(t, discoveredSet) &&
+      !excludeKeys.includes(templateKey(t)),
   );
   const out = [];
   for (const t of pool) {
@@ -208,7 +249,7 @@ function makeGoals(discoveredSet, excludeKeys = [], count = 3) {
   // 兜底：极端情况下模板不足时生成合成目标
   let i = 0;
   while (out.length < count) {
-    out.push({ kind: 'merge', target: 5 + i * 3, reward: 50 + i * 20, progress: 0, done: false });
+    out.push({ kind: 'merge', target: 5 + i * 3, reward: 50 + i * 20, progress: 0, done: false, tier: 1 });
     i++;
   }
   return out;
@@ -587,6 +628,7 @@ class Game {
     this.hintCheckTimer = 0;
     this.depthMap = null;         // 配方深度缓存
     this.goals = [];              // 世界目标（3 个）
+    this.savedDisasters = 0;      // 累计救灾成功次数
 
     /* ----- 存档或新开局 ----- */
     const save = this.saveMgr.load();
@@ -601,6 +643,10 @@ class Game {
     this.bindEvents();
     this.renderTray();
     this.updateWorld(false);
+    // 世界等级确定后再补目标（读取存档时 worldIndex 还是 -1）
+    if (this.goals.length !== 3) {
+      this.goals = makeGoals(this.encyclopedia.discovered, [], 3, goalTierOf(this.worldIndex));
+    }
     this.updateHud();
     this.startLoop();
 
@@ -616,7 +662,7 @@ class Game {
     this.goals = Array.isArray(d.goals)
       ? d.goals.filter((g) => g && typeof g.kind === 'string' && g.target > 0)
       : [];
-    if (!this.goals.length) this.goals = makeGoals(this.encyclopedia.discovered);
+    this.savedDisasters = Math.max(0, parseInt(d.savedDisasters, 10) || 0);
     const size = clampNum(parseInt(d.size, 10) || 6, 6, 8);
     this.board = new Board(size);
     if (Array.isArray(d.grid)) {
@@ -653,6 +699,7 @@ class Game {
       discovered: this.encyclopedia.toData().discovered,
       records: this.encyclopedia.toData().records,
       goals: this.goals,
+      savedDisasters: this.savedDisasters,
       grid,
       size,
     });
@@ -668,10 +715,12 @@ class Game {
     this.failStreak = 0;
     this.lastDiscoveryAt = performance.now();
     this.lastHintAt = -Infinity;
-    this.goals = makeGoals(this.encyclopedia.discovered);
+    this.savedDisasters = 0;
     this.clearSelection();
     this.seedBoard();
     this.updateWorld(false);
+    // 世界等级回落后再按新等级生成目标
+    this.goals = makeGoals(this.encyclopedia.discovered, [], 3, goalTierOf(this.worldIndex));
     this.updateHud();
     this.renderTray();
     this.updateHintBtn();
@@ -690,6 +739,7 @@ class Game {
   }
 
   updateWorld(notify = true) {
+    const tierBefore = goalTierOf(this.worldIndex);
     const idx = this.getWorldIndex();
     const lv = WORLD_LEVELS[idx];
     if (idx > this.worldIndex && notify && this.worldIndex >= 0) {
@@ -697,6 +747,10 @@ class Game {
       this.showToast(`🌍 世界成长：${lv.name}！地图扩大为 ${lv.size}×${lv.size}`);
     }
     this.worldIndex = idx;
+    const tierAfter = goalTierOf(this.worldIndex);
+    if (tierAfter > tierBefore && notify && this.worldIndex >= 0) {
+      this.showToast(`🎯 目标库升级：解锁「${GOAL_STAGE_NAMES[tierAfter]}篇」目标！`);
+    }
     if (this.board.size < lv.size) this.board.resize(lv.size);
     this.updateHud();
   }
@@ -761,7 +815,8 @@ class Game {
       this.audio.play('achievement');
       this.showToast(`🎯 目标完成：${goalLabelOf(g)} +${g.reward} 炼金点`);
       const exclude = this.goals.map(goalKey);
-      const fresh = makeGoals(this.encyclopedia.discovered, exclude, 1);
+      const fresh = makeGoals(
+        this.encyclopedia.discovered, exclude, 1, goalTierOf(this.worldIndex));
       this.goals[i] = fresh[0];
       completed = true;
       break; // 完成一个就停下，避免奖励连锁刷新目标
@@ -779,14 +834,16 @@ class Game {
     el.innerHTML = this.goals.map((g) => {
       const p = clampNum(goalProgressOf(g, state), 0, g.target);
       const pct = g.target ? Math.round((p / g.target) * 100) : 0;
+      const stage = GOAL_STAGE_NAMES[g.tier] || '自然';
       return `<div class="goal-card">
-        <div class="goal-icon">${this.goalIcon(g)}</div>
-        <div class="goal-body">
-          <div class="goal-label">${escapeHtml(goalLabelOf(g))}</div>
-          <div class="goal-progress"><div class="goal-fill" style="width:${pct}%"></div></div>
+        <div class="goal-top">
+          <span class="goal-icon">${this.goalIcon(g)}</span>
+          <span class="goal-label">${escapeHtml(goalLabelOf(g))}</span>
+          <span class="goal-stage">${stage}</span>
+          <span class="goal-num">${Math.min(p, g.target)}/${g.target}</span>
+          <span class="goal-reward">+${g.reward}</span>
         </div>
-        <div class="goal-num">${Math.min(p, g.target)}/${g.target}</div>
-        <div class="goal-reward">+${g.reward}</div>
+        <div class="goal-progress"><div class="goal-fill" style="width:${pct}%"></div></div>
       </div>`;
     }).join('');
   }
@@ -969,6 +1026,7 @@ class Game {
 
     const target = this.board.get(cell.row, cell.col);
     if (target) {
+      if (this.tryCureDisaster(ds.block, target)) return;
       const rid = findRecipe(ds.block.elementId, target.elementId);
       if (rid) this.performMerge(ds.block, target);
       else this.rejectMerge(ds.block, target);
@@ -1123,6 +1181,44 @@ class Game {
     this.updateHintBtn();
   }
 
+  /* ================= 救灾（灾害挑战） ================= */
+
+  /** 判断 [a, b] 是否为"救灾元素 + 灾害方块"（任一方向） */
+  tryCureDisaster(a, b) {
+    const cureOf = (disaster, cure) =>
+      ELEMENTS_BY_ID[disaster.elementId] &&
+      ELEMENTS_BY_ID[disaster.elementId].type === '灾害' &&
+      DISASTER_CURES[disaster.elementId] === cure.elementId;
+    if (cureOf(a, b)) {
+      this.performCure(a, b);
+      return true;
+    }
+    if (cureOf(b, a)) {
+      this.performCure(b, a);
+      return true;
+    }
+    return false;
+  }
+
+  /** 救灾成功：消耗救灾元素与灾害方块，奖励积分并计入成就 */
+  performCure(disaster, cure) {
+    const dEl = ELEMENTS_BY_ID[disaster.elementId];
+    const cEl = ELEMENTS_BY_ID[cure.elementId];
+    const c = this.cellCenter(disaster.row, disaster.col);
+    this.board.remove(disaster.row, disaster.col);
+    this.board.remove(cure.row, cure.col);
+    this.score += CURE_REWARD;
+    this.savedDisasters++;
+    this.particles.burst(c.x, c.y, '#7bed9f', 34, 150);
+    this.floatText(c.x, c.y - 16, `+${CURE_REWARD} 救灾成功`, '#7bed9f');
+    this.audio.play('achievement');
+    this.showToast(`🚒 救灾成功！${dEl.emoji} ${dEl.name} 被 ${cEl.emoji} ${cEl.name} 化解 +${CURE_REWARD} 炼金点 🏆`);
+    if (this.selected === disaster || this.selected === cure) this.clearSelection();
+    this.updateGoals();
+    this.updateHud();
+    this.autoSave();
+  }
+
   /* ================= 选中与删除 ================= */
 
   selectBlock(block) {
@@ -1174,6 +1270,33 @@ class Game {
       ? known.map((c) => `<span class="sel-chip">${c.emoji} ${c.name}</span>`).join('') +
         (unknown ? `<span class="sel-chip locked">❓ 还有 ${unknown} 种未发现</span>` : '')
       : (children.length ? `<span class="sel-chip locked">❓ 有 ${children.length} 种配方尚未探索</span>` : '<span class="sel-chip">暂无已知配方</span>');
+
+    // 灾害方块：展示救世配方，并禁止直接删除（救灾或等待消退）
+    const isDisaster = e.type === '灾害';
+    const deleteBtn = document.getElementById('btn-delete');
+    if (deleteBtn) {
+      deleteBtn.disabled = isDisaster;
+      deleteBtn.textContent = isDisaster ? '🚫 灾害需救灾化解' : '🗑 删除方块';
+    }
+    const cureId = isDisaster ? DISASTER_CURES[e.id] : null;
+    const cureBox = document.getElementById('sel-cure');
+    if (cureBox) {
+      if (cureId) {
+        const cure = ELEMENTS_BY_ID[cureId];
+        const cureKnown = this.encyclopedia.has(cureId);
+        const first = getRecipes(cureId).slice(0, 1)[0];
+        const from = first
+          ? `<div class="sel-cure-from">可由 ${chip(first[0])} + ${chip(first[1])} 合成</div>`
+          : '';
+        cureBox.innerHTML =
+          `<div class="sel-recipe"><div class="sel-subtitle">🚒 救灾配方</div>` +
+          `<div class="sel-parents">${cureKnown ? `${cure.emoji} ${cure.name}` : '❓ ???'}</div>` +
+          from +
+          `<div class="sel-cure-tip">把救灾元素拖到灾害上即可化解，成功 +${CURE_REWARD} 炼金点</div></div>`;
+      } else {
+        cureBox.innerHTML = '';
+      }
+    }
   }
 
   deleteSelected() {
@@ -1220,13 +1343,24 @@ class Game {
 
   updateDisasters() {
     const now = performance.now();
-    for (const b of this.board.allBlocks()) {
+    let changed = false;
+    for (const b of [...this.board.allBlocks()]) {
       if (b.expiresAt && now > b.expiresAt) {
+        const el = ELEMENTS_BY_ID[b.elementId];
         const c = this.cellCenter(b.row, b.col);
         this.board.remove(b.row, b.col);
-        this.particles.burst(c.x, c.y, '#8fa3c8', 12, 60);
+        this.particles.burst(c.x, c.y, '#ff6b6b', 14, 70);
+        this.score = Math.max(0, this.score - DISASTER_PENALTY);
+        this.floatText(c.x, c.y - 16, `-${DISASTER_PENALTY}`, '#ff6b6b');
+        this.audio.play('deny');
+        this.showToast(`⚠️ ${el.emoji} ${el.name} 爆发！救灾失败 -${DISASTER_PENALTY} 炼金点`);
         if (this.selected === b) this.clearSelection();
+        changed = true;
       }
+    }
+    if (changed) {
+      this.updateHud();
+      this.autoSave();
     }
   }
 

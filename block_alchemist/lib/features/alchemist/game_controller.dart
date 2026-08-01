@@ -163,6 +163,7 @@ class Goal {
     required this.kind,
     required this.target,
     required this.reward,
+    this.tier = 1,
     this.typeName,
     this.elementId,
   });
@@ -173,6 +174,9 @@ class Goal {
   final int target;
   final int reward;
 
+  /// 目标等级：1 自然篇 → 2 文明篇 → 3 科技篇 → 4 神话篇，随世界等级解锁
+  final int tier;
+
   String get key => '$kind|${typeName ?? elementId ?? ''}|$target';
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -181,6 +185,7 @@ class Goal {
     'elementId': elementId,
     'target': target,
     'reward': reward,
+    'tier': tier,
   };
 
   static Goal fromJson(Map<String, dynamic> m) => Goal(
@@ -189,35 +194,72 @@ class Goal {
     elementId: m['elementId'] as String?,
     target: (m['target'] as num?)?.toInt() ?? 5,
     reward: (m['reward'] as num?)?.toInt() ?? 50,
+    tier: (m['tier'] as num?)?.toInt() ?? 1,
   );
 }
 
 const List<Goal> kGoalTemplates = <Goal>[
-  Goal(kind: 'type', typeName: '动物', target: 3, reward: 80),
-  Goal(kind: 'type', typeName: '植物', target: 4, reward: 80),
-  Goal(kind: 'type', typeName: '工具', target: 2, reward: 80),
-  Goal(kind: 'type', typeName: '建筑', target: 3, reward: 100),
-  Goal(kind: 'type', typeName: '科技', target: 2, reward: 120),
-  Goal(kind: 'type', typeName: '文明', target: 2, reward: 120),
-  Goal(kind: 'type', typeName: '食物', target: 4, reward: 80),
-  Goal(kind: 'type', typeName: '神话', target: 2, reward: 150),
-  Goal(kind: 'element', elementId: 'rainbow', target: 1, reward: 120),
-  Goal(kind: 'element', elementId: 'city', target: 1, reward: 150),
-  Goal(kind: 'element', elementId: 'electricity', target: 1, reward: 100),
-  Goal(kind: 'element', elementId: 'robot', target: 1, reward: 150),
-  Goal(kind: 'element', elementId: 'airplane', target: 1, reward: 120),
-  Goal(kind: 'element', elementId: 'library', target: 1, reward: 120),
-  Goal(kind: 'element', elementId: 'rocket', target: 1, reward: 180),
-  Goal(kind: 'element', elementId: 'dragon', target: 1, reward: 200),
-  Goal(kind: 'element', elementId: 'phoenix', target: 1, reward: 200),
-  Goal(kind: 'element', elementId: 'mermaid', target: 1, reward: 150),
-  Goal(kind: 'merge', target: 10, reward: 100),
-  Goal(kind: 'merge', target: 30, reward: 150),
-  Goal(kind: 'merge', target: 60, reward: 250),
-  Goal(kind: 'score', target: 500, reward: 100),
-  Goal(kind: 'score', target: 2000, reward: 200),
-  Goal(kind: 'score', target: 5000, reward: 400),
+  Goal(kind: 'type', typeName: '动物', target: 3, reward: 80, tier: 1),
+  Goal(kind: 'type', typeName: '植物', target: 4, reward: 80, tier: 1),
+  Goal(kind: 'type', typeName: '食物', target: 4, reward: 80, tier: 1),
+  Goal(kind: 'type', typeName: '工具', target: 2, reward: 80, tier: 1),
+  Goal(kind: 'type', typeName: '建筑', target: 3, reward: 100, tier: 2),
+  Goal(kind: 'type', typeName: '文明', target: 2, reward: 120, tier: 2),
+  Goal(kind: 'type', typeName: '科技', target: 2, reward: 120, tier: 2),
+  Goal(kind: 'type', typeName: '神话', target: 2, reward: 150, tier: 3),
+  Goal(
+    kind: 'element',
+    elementId: 'electricity',
+    target: 1,
+    reward: 100,
+    tier: 2,
+  ),
+  Goal(kind: 'element', elementId: 'rainbow', target: 1, reward: 120, tier: 2),
+  Goal(kind: 'element', elementId: 'city', target: 1, reward: 150, tier: 3),
+  Goal(kind: 'element', elementId: 'airplane', target: 1, reward: 120, tier: 3),
+  Goal(kind: 'element', elementId: 'library', target: 1, reward: 120, tier: 3),
+  Goal(kind: 'element', elementId: 'mermaid', target: 1, reward: 150, tier: 3),
+  Goal(kind: 'element', elementId: 'robot', target: 1, reward: 150, tier: 3),
+  Goal(kind: 'element', elementId: 'rocket', target: 1, reward: 180, tier: 4),
+  Goal(kind: 'element', elementId: 'dragon', target: 1, reward: 200, tier: 4),
+  Goal(kind: 'element', elementId: 'phoenix', target: 1, reward: 200, tier: 4),
+  Goal(kind: 'merge', target: 10, reward: 100, tier: 1),
+  Goal(kind: 'merge', target: 30, reward: 150, tier: 2),
+  Goal(kind: 'merge', target: 60, reward: 250, tier: 3),
+  Goal(kind: 'score', target: 500, reward: 100, tier: 1),
+  Goal(kind: 'score', target: 2000, reward: 200, tier: 2),
+  Goal(kind: 'score', target: 5000, reward: 400, tier: 3),
 ];
+
+const Map<int, String> kGoalStageNames = <int, String>{
+  1: '自然',
+  2: '文明',
+  3: '科技',
+  4: '神话',
+};
+
+const int kCureReward = 150; // 救灾成功奖励
+const int kDisasterPenalty = 50; // 灾害未化解、自然爆发时的扣分
+
+/// 救世配方：灾害元素 -> 救灾元素（救灾元素通常由合理配方合成，
+/// 如 火灾/野火 ← 泥（水+土），龙卷风 ← 大楼（房子+石头））。
+const Map<String, String> kDisasterCures = <String, String>{
+  'storm': 'wall', // 风暴 → 城墙（石头+石头）
+  'drought': 'rain', // 干旱 → 雨
+  'flood': 'sand', // 洪水 → 沙（沙袋筑堤）
+  'volcano': 'water', // 火山 → 水（冷却岩浆）
+  'earthquake': 'iron', // 地震 → 铁（加固支撑）
+  'tornado': 'building', // 龙卷风 → 大楼（房子+石头避难所）
+  'blizzard': 'fire', // 暴风雪 → 火（取暖）
+  'wildfire': 'mud', // 野火 → 泥（水+土泥浆）
+  'meteor': 'shield', // 陨石 → 盾（防护）
+  'tsunami': 'mountain', // 海啸 → 山（山崖挡浪）
+  'typhoon': 'house', // 台风 → 房子（坚固住所）
+  'avalanche': 'tree', // 雪崩 → 树（森林护坡）
+  'firedisaster': 'mud', // 火灾 → 泥（水+土泥浆）
+  'thunderstorm': 'iron', // 雷暴 → 铁（引雷入地）
+  'coldwave': 'campfire', // 寒潮 → 篝火（取暖）
+};
 
 const Map<String, String> kGoalTypeIcons = <String, String>{
   '动物': '🐾',
@@ -297,6 +339,7 @@ class GameController extends ChangeNotifier {
   bool _lastHintReady = false;
   Map<String, int>? _depthCache; // 配方深度缓存
   List<Goal> goals = <Goal>[]; // 世界目标（3 个）
+  int savedDisasters = 0; // 累计救灾成功次数
   double boardPixelSize = 0;
 
   int get discoveryRev => _discoveryRev;
@@ -304,6 +347,15 @@ class GameController extends ChangeNotifier {
   int get goalRev => _goalRev;
   double get gameTime => _time;
   int get discoveredCount => discovered.length;
+
+  /// 当前世界等级解锁到的目标等级（1 自然 → 4 神话）
+  int get unlockedGoalTier => worldIndex >= 6
+      ? 4
+      : worldIndex >= 4
+      ? 3
+      : worldIndex >= 2
+      ? 2
+      : 1;
 
   WorldLevel get worldLevel => kWorldLevels[worldIndex < 0 ? 0 : worldIndex];
   String get worldLabel => 'Lv${worldIndex + 1} ${worldLevel.name}';
@@ -337,9 +389,7 @@ class GameController extends ChangeNotifier {
             .where((g) => g.target > 0)
             .take(3)
             .toList();
-        if (goals.length != 3) {
-          goals = _makeGoals(discovered, const <String>[], 3);
-        }
+        savedDisasters = (map['savedDisasters'] as num?)?.toInt() ?? 0;
         boardSize = ((map['size'] as num?)?.toInt() ?? 6).clamp(6, 8);
         _newGrid(boardSize);
         final gridData = map['grid'] as List?;
@@ -360,9 +410,11 @@ class GameController extends ChangeNotifier {
       }
     } else {
       _seed();
-      goals = _makeGoals(discovered, const <String>[], 3);
     }
     _updateWorld(notify: false);
+    if (goals.length != 3) {
+      goals = _makeGoals(discovered, const <String>[], 3, unlockedGoalTier);
+    }
     notifyListeners();
   }
 
@@ -398,6 +450,7 @@ class GameController extends ChangeNotifier {
         'discovered': discovered.toList(),
         'records': records.map((e) => e.toJson()).toList(),
         'goals': goals.map((g) => g.toJson()).toList(),
+        'savedDisasters': savedDisasters,
         'grid': flat,
         'size': boardSize,
       }),
@@ -410,6 +463,7 @@ class GameController extends ChangeNotifier {
     score = 0;
     mergeCount = 0;
     failStreak = 0;
+    savedDisasters = 0;
     lastDiscoveryAtMs = _wallMs;
     lastHintAtMs = double.negativeInfinity;
     nextEventAtMs = _wallMs + 45000;
@@ -420,7 +474,7 @@ class GameController extends ChangeNotifier {
     floatTexts.clear();
     cellFlashes.clear();
     _discoveryRev++;
-    goals = _makeGoals(discovered, const <String>[], 3);
+    goals = _makeGoals(discovered, const <String>[], 3, unlockedGoalTier);
     _goalRev++;
     _seed();
     _updateWorld(notify: false);
@@ -500,6 +554,7 @@ class GameController extends ChangeNotifier {
   }
 
   void _updateWorld({bool notify = true}) {
+    final tierBefore = unlockedGoalTier;
     final idx = _calcWorldIndex();
     final lv = kWorldLevels[idx];
     if (idx > worldIndex && notify && worldIndex >= 0) {
@@ -507,6 +562,10 @@ class GameController extends ChangeNotifier {
       showToast('🌍 世界成长：${lv.name}！地图扩大为 ${lv.size}×${lv.size}');
     }
     worldIndex = idx;
+    final tierAfter = unlockedGoalTier;
+    if (tierAfter > tierBefore && notify && worldIndex >= 0) {
+      showToast('🎯 目标库升级：解锁「${kGoalStageNames[tierAfter]}篇」目标！');
+    }
     if (boardSize < lv.size) {
       final old = grid;
       boardSize = lv.size;
@@ -596,16 +655,26 @@ class GameController extends ChangeNotifier {
       SoundService.discover();
       showToast('🎯 目标完成：${goalLabel(g)} +${g.reward} 炼金点');
       final exclude = goals.map((x) => x.key).toList();
-      goals[i] = _makeGoals(discovered, exclude, 1).first;
+      goals[i] = _makeGoals(discovered, exclude, 1, unlockedGoalTier).first;
       _goalRev++;
       save();
       break;
     }
   }
 
-  List<Goal> _makeGoals(Set<String> known, List<String> exclude, int count) {
+  List<Goal> _makeGoals(
+    Set<String> known,
+    List<String> exclude,
+    int count,
+    int unlockedTier,
+  ) {
     final pool = _shuffle(kGoalTemplates, _rnd)
-        .where((t) => _goalFeasible(t, known) && !exclude.contains(t.key))
+        .where(
+          (t) =>
+              t.tier <= unlockedTier &&
+              _goalFeasible(t, known) &&
+              !exclude.contains(t.key),
+        )
         .toList();
     final out = <Goal>[];
     for (final t in pool) {
@@ -615,7 +684,9 @@ class GameController extends ChangeNotifier {
     // 兜底：模板不足时生成合成目标，保证永远有 3 个目标
     var i = 0;
     while (out.length < count) {
-      out.add(Goal(kind: 'merge', target: 5 + i * 3, reward: 50 + i * 20));
+      out.add(
+        Goal(kind: 'merge', target: 5 + i * 3, reward: 50 + i * 20, tier: 1),
+      );
       i++;
     }
     return out;
@@ -734,6 +805,8 @@ class GameController extends ChangeNotifier {
   }
 
   void performMerge(Block a, Block b) {
+    // 先检查救灾：把救灾元素拖到灾害上（或反向）直接化解，不走普通配方
+    if (tryCureDisaster(a, b)) return;
     final rid = findRecipe(a.elementId, b.elementId);
     if (rid == null) {
       rejectMerge(a, b);
@@ -767,6 +840,48 @@ class GameController extends ChangeNotifier {
     );
     SoundService.merge();
     if (selected == a || selected == b) clearSelection();
+    notifyListeners();
+  }
+
+  /* ================= 救灾（灾害挑战） ================= */
+
+  /// 判断 [a, b] 是否为“救灾元素 + 灾害方块”（任一方向）
+  bool tryCureDisaster(Block a, Block b) {
+    if (_isCurePair(a, b)) {
+      performCure(a, b);
+      return true;
+    }
+    if (_isCurePair(b, a)) {
+      performCure(b, a);
+      return true;
+    }
+    return false;
+  }
+
+  bool _isCurePair(Block disaster, Block cure) =>
+      disaster.def.type == '灾害' &&
+      kDisasterCures[disaster.elementId] == cure.elementId;
+
+  /// 救灾成功：消耗救灾元素与灾害方块，奖励积分并计入成就
+  void performCure(Block disaster, Block cure) {
+    final dEl = disaster.def;
+    final cEl = cure.def;
+    final c = centerNorm(disaster.row, disaster.col);
+    grid[disaster.row][disaster.col] = null;
+    grid[cure.row][cure.col] = null;
+    disaster.removed = true;
+    cure.removed = true;
+    score += kCureReward;
+    savedDisasters++;
+    burst(c.dx, c.dy, const Color(0xFF7BED9F), 34, 0.268);
+    floatText(c.dx, c.dy - 0.06, '+$kCureReward 救灾成功', const Color(0xFF7BED9F));
+    SoundService.discover();
+    showToast(
+      '🚒 救灾成功！${dEl.emoji} ${dEl.name} 被 ${cEl.emoji} ${cEl.name} 化解 +$kCureReward 炼金点 🏆',
+    );
+    if (selected == disaster || selected == cure) clearSelection();
+    _checkGoals();
+    save();
     notifyListeners();
   }
 
@@ -822,6 +937,10 @@ class GameController extends ChangeNotifier {
   void deleteSelected() {
     final b = selected;
     if (b == null) return;
+    if (b.def.type == '灾害') {
+      showToast('🚫 灾害无法删除，请用救灾元素化解或等待消退');
+      return;
+    }
     final c = centerNorm(b.row, b.col);
     grid[b.row][b.col] = null;
     burst(c.dx, c.dy, const Color(0xFFFF8A8A), 14, 0.125);
@@ -949,14 +1068,27 @@ class GameController extends ChangeNotifier {
       for (var c = 0; c < boardSize; c++) {
         final b = grid[r][c];
         if (b != null && b.expiresAt != null && _wallMs > b.expiresAt!) {
+          final def = b.def;
           grid[r][c] = null;
           final n = centerNorm(r, c);
-          burst(n.dx, n.dy, const Color(0xFF8FA3C8), 12, 0.107);
+          burst(n.dx, n.dy, const Color(0xFFFF6B6B), 14, 0.125);
+          score = max(0, score - kDisasterPenalty);
+          floatText(
+            n.dx,
+            n.dy - 0.06,
+            '-$kDisasterPenalty',
+            const Color(0xFFFF6B6B),
+          );
+          SoundService.deny();
+          showToast(
+            '⚠️ ${def.emoji} ${def.name} 爆发！救灾失败 -$kDisasterPenalty 炼金点',
+          );
           if (selected == b) clearSelection();
           changed = true;
         }
       }
     }
+    if (changed) save();
     return changed;
   }
 

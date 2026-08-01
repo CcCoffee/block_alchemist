@@ -29,12 +29,12 @@ class _SelectionSheetState extends ConsumerState<_SelectionSheet> {
   @override
   Widget build(BuildContext context) {
     // 方块被删除或取消选中时自动关闭面板
-    ref.listen<Block?>(
-      gameControllerProvider.select((c) => c.selected),
-      (prev, next) {
-        if (next == null) Navigator.of(context).maybePop();
-      },
-    );
+    ref.listen<Block?>(gameControllerProvider.select((c) => c.selected), (
+      prev,
+      next,
+    ) {
+      if (next == null) Navigator.of(context).maybePop();
+    });
     return SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -67,6 +67,13 @@ class SelectionPanel extends ConsumerWidget {
     final children = childrenOf(def.id);
     final knownChildren = children.where((c) => game.discovered.contains(c.id));
     final unknownCount = children.length - knownChildren.length;
+    final isDisaster = def.type == '灾害';
+    final cureId = kDisasterCures[def.id];
+    final cure = cureId == null ? null : elementById[cureId];
+    final cureKnown = cure != null && game.discovered.contains(cure.id);
+    final cureParents = cure == null || cure.recipes.isEmpty
+        ? <ElementDef>[]
+        : cure.recipes.first.map((id) => elementById[id]!).toList();
 
     return _PanelBox(
       child: Column(
@@ -80,13 +87,20 @@ class SelectionPanel extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(def.name,
-                        style: const TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.w800)),
+                    Text(
+                      def.name,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                     Text(
                       '${kRarityNames[def.rarity]} · ${def.type}',
                       style: TextStyle(
-                          fontSize: 12, color: rarityColor, fontWeight: FontWeight.w700),
+                        fontSize: 12,
+                        color: rarityColor,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ],
                 ),
@@ -94,8 +108,10 @@ class SelectionPanel extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Text(def.desc,
-              style: const TextStyle(fontSize: 12, color: Color(0xFF8A93B5))),
+          Text(
+            def.desc,
+            style: const TextStyle(fontSize: 12, color: Color(0xFF8A93B5)),
+          ),
           const SizedBox(height: 10),
           Row(
             children: [
@@ -109,9 +125,14 @@ class SelectionPanel extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 10),
-          const Text('📜 合成配方',
-              style: TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF6EA8FF))),
+          const Text(
+            '📜 合成配方',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF6EA8FF),
+            ),
+          ),
           const SizedBox(height: 4),
           Wrap(
             spacing: 6,
@@ -123,22 +144,25 @@ class SelectionPanel extends ConsumerWidget {
                       if (i > 0) const InfoChip(text: '或', locked: false),
                       InfoChip(
                         text: _recipeName(recipePairs[i][0], game),
-                        locked:
-                            !game.discovered.contains(recipePairs[i][0].id),
+                        locked: !game.discovered.contains(recipePairs[i][0].id),
                       ),
                       const InfoChip(text: '+', locked: false),
                       InfoChip(
                         text: _recipeName(recipePairs[i][1], game),
-                        locked:
-                            !game.discovered.contains(recipePairs[i][1].id),
+                        locked: !game.discovered.contains(recipePairs[i][1].id),
                       ),
                     ],
                   ],
           ),
           const SizedBox(height: 8),
-          const Text('🔬 可以合成',
-              style: TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF6EA8FF))),
+          const Text(
+            '🔬 可以合成',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF6EA8FF),
+            ),
+          ),
           const SizedBox(height: 4),
           Wrap(
             spacing: 6,
@@ -148,9 +172,55 @@ class SelectionPanel extends ConsumerWidget {
                 InfoChip(text: '${c.emoji} ${c.name}', locked: false),
               if (unknownCount > 0)
                 InfoChip(text: '❓ 还有 $unknownCount 种未发现', locked: true),
-              if (children.isEmpty) const InfoChip(text: '暂无已知配方', locked: false),
+              if (children.isEmpty)
+                const InfoChip(text: '暂无已知配方', locked: false),
             ],
           ),
+          if (isDisaster) ...[
+            const SizedBox(height: 8),
+            const Text(
+              '🚒 救灾配方',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF7BED9F),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                if (cure != null)
+                  InfoChip(
+                    text: cureKnown ? '${cure.emoji} ${cure.name}' : '❓ ???',
+                    locked: !cureKnown,
+                  ),
+              ],
+            ),
+            if (cureParents.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '可由 ${cureParents.map((p) => p.name).join(' + ')} 合成',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF8A93B5),
+                  ),
+                ),
+              ),
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Text(
+                '把救灾元素拖到灾害上即可化解，成功 +$kCureReward 炼金点',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFF7BED9F),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
@@ -159,10 +229,16 @@ class SelectionPanel extends ConsumerWidget {
                 foregroundColor: const Color(0xFFFFB3B3),
                 side: const BorderSide(color: Color(0x66FF5A5A)),
               ),
-              onPressed: () =>
-                  ref.read(gameControllerProvider.notifier).deleteSelected(),
-              icon: const Icon(Icons.delete_outline, size: 18),
-              label: const Text('删除方块'),
+              onPressed: isDisaster
+                  ? null
+                  : () => ref
+                        .read(gameControllerProvider.notifier)
+                        .deleteSelected(),
+              icon: Icon(
+                isDisaster ? Icons.block : Icons.delete_outline,
+                size: 18,
+              ),
+              label: Text(isDisaster ? '灾害需救灾化解' : '删除方块'),
             ),
           ),
         ],
@@ -180,11 +256,14 @@ class SelectionPanel extends ConsumerWidget {
         ),
         child: Column(
           children: [
-            Text(label,
-                style: const TextStyle(fontSize: 10, color: Color(0xFF8A93B5))),
-            Text('$value',
-                style: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w800)),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 10, color: Color(0xFF8A93B5)),
+            ),
+            Text(
+              '$value',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+            ),
           ],
         ),
       ),
@@ -227,9 +306,7 @@ class InfoChip extends StatelessWidget {
         color: const Color(0x0FFFFFFF),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
-          color: locked
-              ? const Color(0x14FFFFFF)
-              : const Color(0x17FFFFFF),
+          color: locked ? const Color(0x14FFFFFF) : const Color(0x17FFFFFF),
         ),
       ),
       child: Text(
