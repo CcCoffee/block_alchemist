@@ -62,8 +62,10 @@ lines.push('  final int nature;');
 lines.push('  final int tech;');
 lines.push('  final int prosperity;');
 lines.push('  final int value;');
-lines.push('  /// [a, b] 无序配方，null 表示初始元素');
-lines.push('  final List<String>? recipe;');
+lines.push('  /// 全部配方（无序对 [a, b]）；空列表表示初始元素');
+lines.push('  final List<List<String>> recipes;');
+lines.push('  /// 主配方（第一个），用于简单展示');
+lines.push('  List<String>? get recipe => recipes.isEmpty ? null : recipes.first;');
 lines.push('  const ElementDef({');
 lines.push('    required this.id,');
 lines.push('    required this.name,');
@@ -75,18 +77,20 @@ lines.push('    required this.nature,');
 lines.push('    required this.tech,');
 lines.push('    required this.prosperity,');
 lines.push('    required this.value,');
-lines.push('    this.recipe,');
+lines.push('    required this.recipes,');
 lines.push('  });');
 lines.push('}');
 lines.push('');
 lines.push('const List<ElementDef> kElements = <ElementDef>[');
 for (const e of ELEMENTS) {
-  const recipe = e.recipe ? `[${e.recipe.map(q).join(', ')}]` : 'null';
+  const recipes = e.recipes.length
+    ? `[${e.recipes.map((r) => `[${r.map(q).join(', ')}]`).join(', ')}]`
+    : '[]';
   lines.push(
     `  ElementDef(id: ${q(e.id)}, name: ${q(e.name)}, emoji: ${q(e.emoji)}, ` +
       `type: ${q(e.type)}, rarity: ${e.rarity}, desc: ${q(e.desc)}, ` +
       `nature: ${e.attrs.nature}, tech: ${e.attrs.tech}, ` +
-      `prosperity: ${e.attrs.prosperity}, value: ${e.attrs.value}, recipe: ${recipe}),`,
+      `prosperity: ${e.attrs.prosperity}, value: ${e.attrs.value}, recipes: ${recipes}),`,
   );
 }
 lines.push('];');
@@ -111,7 +115,7 @@ lines.push('String _pairKey(String a, String b) => a.compareTo(b) <= 0 ? "$a|$b"
 lines.push('');
 lines.push('final Map<String, String> _recipeIndex = <String, String>{');
 lines.push('  for (final e in kElements)');
-lines.push('    if (e.recipe != null) _pairKey(e.recipe![0], e.recipe![1]): e.id,');
+lines.push('    for (final r in e.recipes) _pairKey(r[0], r[1]): e.id,');
 lines.push('};');
 lines.push('');
 lines.push('/// 查询两个元素的合成结果；没有配方返回 null');
@@ -122,14 +126,23 @@ lines.push('}');
 lines.push('');
 lines.push('/// 某元素能参与合成的所有“孩子”');
 lines.push('List<ElementDef> childrenOf(String id) => kElements');
-lines.push('    .where((e) => e.recipe != null && (e.recipe![0] == id || e.recipe![1] == id))');
+lines.push('    .where((e) => e.recipes.any((r) => r[0] == id || r[1] == id))');
 lines.push('    .toList();');
 lines.push('');
-lines.push('/// 某元素的合成配方“父母”');
+lines.push('/// 某元素的主配方“父母”');
 lines.push('List<ElementDef> parentsOf(String id) {');
 lines.push('  final e = elementById[id];');
 lines.push('  if (e == null || e.recipe == null) return const [];');
 lines.push('  return e.recipe!.map((p) => elementById[p]!).toList();');
+lines.push('}');
+lines.push('');
+lines.push('/// 某元素的全部配方（每对返回 [父A, 父B]）');
+lines.push('List<List<ElementDef>> recipePairsOf(String id) {');
+lines.push('  final e = elementById[id];');
+lines.push('  if (e == null) return const [];');
+lines.push('  return e.recipes');
+lines.push('      .map((r) => [elementById[r[0]]!, elementById[r[1]]!])');
+lines.push('      .toList();');
 lines.push('}');
 lines.push('');
 lines.push(

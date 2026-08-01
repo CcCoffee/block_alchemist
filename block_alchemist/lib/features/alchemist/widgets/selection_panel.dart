@@ -63,7 +63,7 @@ class SelectionPanel extends ConsumerWidget {
 
     final def = block.def;
     final rarityColor = kRarityColors[def.rarity];
-    final parents = parentsOf(def.id);
+    final recipePairs = recipePairsOf(def.id);
     final children = childrenOf(def.id);
     final knownChildren = children.where((c) => game.discovered.contains(c.id));
     final unknownCount = children.length - knownChildren.length;
@@ -116,18 +116,23 @@ class SelectionPanel extends ConsumerWidget {
           Wrap(
             spacing: 6,
             runSpacing: 4,
-            children: parents.isEmpty
+            children: recipePairs.isEmpty
                 ? const [InfoChip(text: '✨ 初始元素', locked: false)]
                 : [
-                    for (final p in parents)
+                    for (var i = 0; i < recipePairs.length; i++) ...[
+                      if (i > 0) const InfoChip(text: '或', locked: false),
                       InfoChip(
-                        text: game.discovered.contains(p.id)
-                            ? '${p.emoji} ${p.name}'
-                            : '❓ ???',
-                        locked: !game.discovered.contains(p.id),
+                        text: _recipeName(recipePairs[i][0], game),
+                        locked:
+                            !game.discovered.contains(recipePairs[i][0].id),
                       ),
-                    const InfoChip(text: '＝', locked: false),
-                    InfoChip(text: '${def.emoji} ${def.name}', locked: false),
+                      const InfoChip(text: '+', locked: false),
+                      InfoChip(
+                        text: _recipeName(recipePairs[i][1], game),
+                        locked:
+                            !game.discovered.contains(recipePairs[i][1].id),
+                      ),
+                    ],
                   ],
           ),
           const SizedBox(height: 8),
@@ -186,6 +191,9 @@ class SelectionPanel extends ConsumerWidget {
     );
   }
 }
+
+String _recipeName(ElementDef e, GameController game) =>
+    game.discovered.contains(e.id) ? '${e.emoji} ${e.name}' : '❓ ???';
 
 class _PanelBox extends StatelessWidget {
   const _PanelBox({required this.child});

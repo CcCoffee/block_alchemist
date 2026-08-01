@@ -289,17 +289,18 @@ class _CodexDetailCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final parents = parentsOf(element.id);
     final children = childrenOf(element.id)
         .where((c) => game.discovered.contains(c.id))
         .toList();
-    final parentText = parents.isEmpty
+    final recipePairs = recipePairsOf(element.id);
+    String name(ElementDef p) => game.discovered.contains(p.id)
+        ? '${p.emoji} ${p.name}'
+        : '❓ ???';
+    final parentText = recipePairs.isEmpty
         ? '初始元素'
-        : parents
-            .map((p) => game.discovered.contains(p.id)
-                ? '${p.emoji} ${p.name}'
-                : '❓ ???')
-            .join(' + ');
+        : recipePairs
+            .map((pair) => pair.map(name).join(' + '))
+            .join(' 或 ');
     final childrenText = children.isEmpty
         ? '暂无'
         : children.map((c) => '${c.emoji} ${c.name}').join('、');

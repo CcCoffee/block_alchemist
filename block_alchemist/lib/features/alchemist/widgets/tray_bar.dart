@@ -97,70 +97,148 @@ class _TrayBarState extends ConsumerState<TrayBar> {
                   style: TextStyle(color: Color(0xFF8A93B5))),
             )
           else if (!_expanded)
-            // 收起状态：最多同时显示两行，超出部分裁切 + 底部渐隐，
-            // 不随发现数量挤占棋盘高度
+            // 收起状态：固定两行高度 + 横向滚动，
+            // 既方便浏览所有元素，又不随发现数量挤占棋盘高度
             SizedBox(
               height: compact ? 88 : 104,
-              child: ClipRect(
-                child: Stack(
-                  children: [
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (final e in list)
-                          _TrayChip(
-                            element: e,
-                            toLocal: widget.toBoardLocal,
-                            compact: compact,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // 第一行：偶数位元素
+                          Row(
+                            children: [
+                              for (var i = 0; i < list.length; i += 2)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: _TrayChip(
+                                    element: list[i],
+                                    toLocal: widget.toBoardLocal,
+                                    compact: compact,
+                                  ),
+                                ),
+                            ],
                           ),
-                      ],
-                    ),
-                    // 底部渐隐：提示还有更多元素
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      height: 22,
-                      child: IgnorePointer(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                const Color(0x00161D33),
-                                const Color(0xE6161D33),
-                              ],
-                            ),
+                          const SizedBox(height: 8),
+                          // 第二行：奇数位元素
+                          Row(
+                            children: [
+                              for (var i = 1; i < list.length; i += 2)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: _TrayChip(
+                                    element: list[i],
+                                    toLocal: widget.toBoardLocal,
+                                    compact: compact,
+                                  ),
+                                ),
+                            ],
                           ),
-                        ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  // 左右渐隐：提示横向还有更多元素
+                  _EdgeFade(left: true),
+                  _EdgeFade(left: false),
+                ],
               ),
             )
           else
             // 展开状态：固定高度区域内滚动，棋盘尺寸不受影响
             SizedBox(
               height: compact ? 118 : 170,
-              child: SingleChildScrollView(
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final e in list)
-                      _TrayChip(
-                        element: e,
-                        toLocal: widget.toBoardLocal,
-                        compact: compact,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: SingleChildScrollView(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final e in list)
+                            _TrayChip(
+                              element: e,
+                              toLocal: widget.toBoardLocal,
+                              compact: compact,
+                            ),
+                        ],
                       ),
-                  ],
-                ),
+                    ),
+                  ),
+                  // 上下渐隐：提示纵向还有更多元素
+                  _VerticalFade(top: true),
+                  _VerticalFade(top: false),
+                ],
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// 横向滚动边缘渐隐
+class _EdgeFade extends StatelessWidget {
+  const _EdgeFade({required this.left});
+  final bool left;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: left ? 0 : null,
+      right: left ? null : 0,
+      top: 0,
+      bottom: 0,
+      width: 24,
+      child: IgnorePointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: left ? Alignment.centerLeft : Alignment.centerRight,
+              end: left ? Alignment.centerRight : Alignment.centerLeft,
+              colors: const [
+                Color(0xE6161D33),
+                Color(0x00161D33),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 纵向滚动边缘渐隐
+class _VerticalFade extends StatelessWidget {
+  const _VerticalFade({required this.top});
+  final bool top;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: 0,
+      right: 0,
+      top: top ? 0 : null,
+      bottom: top ? null : 0,
+      height: 16,
+      child: IgnorePointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: top ? Alignment.topCenter : Alignment.bottomCenter,
+              end: top ? Alignment.bottomCenter : Alignment.topCenter,
+              colors: const [
+                Color(0xE6161D33),
+                Color(0x00161D33),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

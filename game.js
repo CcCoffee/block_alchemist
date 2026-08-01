@@ -853,12 +853,15 @@ class Game {
     document.getElementById('sel-prosperity').textContent = e.attrs.prosperity;
     document.getElementById('sel-value').textContent = e.attrs.value;
 
-    const parents = getParents(e.id);
-    document.getElementById('sel-parents').innerHTML = parents.length
-      ? parents.map((p) =>
-          `<span class="sel-chip ${this.encyclopedia.has(p.id) ? '' : 'locked'}">` +
-          `${this.encyclopedia.has(p.id) ? `${p.emoji} ${p.name}` : '❓ ???'}</span>`
-        ).join('<span class="sel-chip" style="background:transparent;border:none">+</span>')
+    // 支持一物多配方：展示全部合成路径
+    const recipes = getRecipes(e.id);
+    const chip = (p) =>
+      `<span class="sel-chip ${this.encyclopedia.has(p.id) ? '' : 'locked'}">` +
+      `${this.encyclopedia.has(p.id) ? `${p.emoji} ${p.name}` : '❓ ???'}</span>`;
+    document.getElementById('sel-parents').innerHTML = recipes.length
+      ? recipes.map(([pa, pb]) =>
+          `${chip(pa)}<span class="sel-chip" style="background:transparent;border:none">+</span>${chip(pb)}`
+        ).join('<span class="sel-chip" style="background:transparent;border:none">或</span>')
       : '<span class="sel-chip">✨ 初始元素</span>';
 
     const children = getChildren(e.id);
@@ -972,9 +975,11 @@ class Game {
     const e = ELEMENTS_BY_ID[id];
     if (!e || !this.encyclopedia.has(id)) return;
     const r = RARITY_INFO[e.rarity];
-    const parents = getParents(e.id).map((p) =>
-      this.encyclopedia.has(p.id) ? `${p.emoji} ${p.name}` : '❓ ???'
-    ).join(' + ') || '初始元素';
+    const recipes = getRecipes(e.id);
+    const name = (p) =>
+      this.encyclopedia.has(p.id) ? `${p.emoji} ${p.name}` : '❓ ???';
+    const parents = recipes.map(([pa, pb]) => `${name(pa)} + ${name(pb)}`)
+        .join(' 或 ') || '初始元素';
     const children = getChildren(e.id)
       .filter((c) => this.encyclopedia.has(c.id))
       .map((c) => `${c.emoji} ${c.name}`).join('、') || '暂无';
