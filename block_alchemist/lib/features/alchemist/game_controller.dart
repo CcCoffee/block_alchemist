@@ -42,7 +42,7 @@ class Block {
   int col;
   final double createdAt;
   bool removed = false;
-  double? expiresAt; // 灾害方块存活到某个游戏时间
+  double? expiresAt; // 灾害方块存活到的现实时间（毫秒时间戳）
 
   ElementDef get def => elementById[elementId]!;
 }
@@ -253,13 +253,21 @@ final gameControllerProvider = ChangeNotifierProvider<GameController>((ref) {
 });
 
 class GameController extends ChangeNotifier {
-  GameController(this._storage) {
+  GameController(this._storage, {DateTime Function()? now})
+    : _now = now ?? DateTime.now {
+    lastDiscoveryAtMs = _wallMs;
+    nextEventAtMs = _wallMs + 45000; // 开局 45 秒后才可能降临灾害
     _load();
   }
 
   final GameStorage _storage;
+  final DateTime Function() _now; // 可注入的现实时钟（测试用）
   final Random _rnd = Random();
   double _time = 0;
+
+  /// 现实时间（毫秒时间戳）。所有倒计时都用它，保证与真实时间一致：
+  /// 应用退到后台、帧被暂停时，倒计时仍然按真实时间走。
+  double get _wallMs => _now().millisecondsSinceEpoch.toDouble();
 
   List<List<Block?>> grid = [];
   int boardSize = 6;
@@ -273,18 +281,18 @@ class GameController extends ChangeNotifier {
   List<Particle> particles = <Particle>[];
   List<FloatText> floatTexts = <FloatText>[];
   List<CellFlash> cellFlashes = <CellFlash>[];
-  double eventTimer = 45;
   int worldIndex = -1;
   bool muted = false;
   String? toast;
-  double _toastUntil = 0;
+  double _toastUntilMs = 0;
+  double nextEventAtMs = 0; // 下次灾害检查的现实时间点
   int _discoveryRev = 0;
   int _selectRev = 0;
   int _goalRev = 0;
   int mergeCount = 0; // 累计成功合成次数（目标进度）
   int failStreak = 0; // 连续失败次数（卡住判定）
-  double lastDiscoveryAt = 0; // 上次新发现时间（游戏内时间）
-  double lastHintAt = -1e9; // 上次使用提示的时间
+  double lastDiscoveryAtMs = 0; // 上次新发现时间（现实毫秒）
+  double lastHintAtMs = double.negativeInfinity; // 上次使用提示的时间（现实毫秒）
   double _hintCheck = 0;
   bool _lastHintReady = false;
   Map<String, int>? _depthCache; // 配方深度缓存
@@ -402,8 +410,9 @@ class GameController extends ChangeNotifier {
     score = 0;
     mergeCount = 0;
     failStreak = 0;
-    lastDiscoveryAt = 0;
-    lastHintAt = -1e9;
+    lastDiscoveryAtMs = _wallMs;
+    lastHintAtMs = double.negativeInfinity;
+    nextEventAtMs = _wallMs + 45000;
     selected = null;
     drag = null;
     mergeAnims.clear();
@@ -533,7 +542,7 @@ class GameController extends ChangeNotifier {
     records.insert(0, RecordEntry(id, DateTime.now().millisecondsSinceEpoch));
     if (records.length > 300) records.removeLast();
     _discoveryRev++;
-    lastDiscoveryAt = _time;
+    lastDiscoveryAtMs = _wallMs;
     _checkGoals();
     return true;
   }
@@ -637,8 +646,8 @@ class GameController extends ChangeNotifier {
 
   /// 连续失败 >=3 次，或 90 秒没有新发现；且 45 秒冷却已过
   bool get hintReady {
-    final stuck = failStreak >= 3 || (_time - lastDiscoveryAt) > 90;
-    final cooldown = (_time - lastHintAt) > 45;
+    final stuck = failStreak >= 3 || (_wallMs - lastDiscoveryAtMs) > 90000;
+    final cooldown = (_wallMs - lastHintAtMs) > 45000;
     return stuck && cooldown;
   }
 
@@ -655,7 +664,7 @@ class GameController extends ChangeNotifier {
     final b = elementById[pair.$2]!;
     showToast('💡 线索：${a.emoji} ${a.name} 与 ${b.emoji} ${b.name} 之间似乎藏着秘密…');
     failStreak = 0;
-    lastHintAt = _time;
+    lastHintAtMs = _wallMs;
     SoundService.place();
     return pair;
   }
@@ -909,10 +918,9 @@ class GameController extends ChangeNotifier {
 
   /* ================= 灾害事件 ================= */
 
-  bool updateEvents(double dt) {
-    eventTimer -= dt;
-    if (eventTimer > 0) return false;
-    eventTimer = 50 + _rnd.nextDouble() * 40;
+  bool updateEvents() {
+    if (_wallMs < nextEventAtMs) return false;
+    nextEventAtMs = _wallMs + (50 + _rnd.nextDouble() * 40) * 1000;
     if (discovered.length < 15) return false;
     if (countEmpty() < 2) return false;
     if (_rnd.nextDouble() > 0.55) return false;
@@ -925,7 +933,7 @@ class GameController extends ChangeNotifier {
     if (cell == null) return;
     final id = kDisasterIds[_rnd.nextInt(kDisasterIds.length)];
     final block = Block(id, cell.$1, cell.$2, _time);
-    block.expiresAt = _time + 75;
+    block.expiresAt = _wallMs + 75000; // 灾害存活 75 秒（现实时间）
     grid[cell.$1][cell.$2] = block;
     final def = elementById[id]!;
     final isNew = discover(id);
@@ -940,7 +948,7 @@ class GameController extends ChangeNotifier {
     for (var r = 0; r < boardSize; r++) {
       for (var c = 0; c < boardSize; c++) {
         final b = grid[r][c];
-        if (b != null && b.expiresAt != null && _time > b.expiresAt!) {
+        if (b != null && b.expiresAt != null && _wallMs > b.expiresAt!) {
           grid[r][c] = null;
           final n = centerNorm(r, c);
           burst(n.dx, n.dy, const Color(0xFF8FA3C8), 12, 0.107);
@@ -1007,7 +1015,7 @@ class GameController extends ChangeNotifier {
       }
     }
 
-    if (toast != null && _time >= _toastUntil) {
+    if (toast != null && _wallMs >= _toastUntilMs) {
       toast = null;
       changed = true;
     }
@@ -1022,7 +1030,7 @@ class GameController extends ChangeNotifier {
       }
     }
 
-    if (updateEvents(dt)) changed = true;
+    if (updateEvents()) changed = true;
     if (updateDisasters()) changed = true;
     if (changed) notifyListeners();
   }
@@ -1062,7 +1070,7 @@ class GameController extends ChangeNotifier {
 
   void showToast(String msg) {
     toast = msg;
-    _toastUntil = _time + 2.6;
+    _toastUntilMs = _wallMs + 2600;
     notifyListeners();
   }
 

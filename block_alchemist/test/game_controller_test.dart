@@ -124,7 +124,11 @@ void main() {
   });
 
   test('灾害事件：降临并自动消退', () {
-    final c = GameController(GameStorage.instance);
+    var nowMs = DateTime(2026, 1, 1).millisecondsSinceEpoch.toDouble();
+    final c = GameController(
+      GameStorage.instance,
+      now: () => DateTime.fromMillisecondsSinceEpoch(nowMs.toInt()),
+    );
     for (final id in kElements.map((e) => e.id).take(16)) {
       c.discover(id);
     }
@@ -132,7 +136,7 @@ void main() {
     final disaster = c.allBlocks().where((b) => b.expiresAt != null).toList();
     expect(disaster, isNotEmpty);
     expect(c.discovered.contains(disaster.first.elementId), isTrue);
-    disaster.first.expiresAt = c.gameTime - 1;
+    disaster.first.expiresAt = nowMs - 1; // 现实时间已过期
     c.tick(0.1);
     expect(c.allBlocks().any((b) => b.expiresAt != null), isFalse);
   });
@@ -209,5 +213,33 @@ void main() {
 
     expect(c.failStreak, 0, reason: '使用提示后失败计数清零');
     expect(c.hintReady, isFalse, reason: '提示后有冷却');
+  });
+
+  test('倒计时与现实时间匹配：帧暂停/退后台后仍按真实时间走', () {
+    var nowMs = DateTime(2026, 1, 1).millisecondsSinceEpoch.toDouble();
+    final c = GameController(
+      GameStorage.instance,
+      now: () => DateTime.fromMillisecondsSinceEpoch(nowMs.toInt()),
+    );
+    expect(c.hintReady, isFalse);
+
+    // 游戏帧只推进 1 秒，但现实时间已过去 91 秒
+    c.tick(1.0);
+    nowMs += 91000;
+    expect(c.hintReady, isTrue, reason: '90 秒无发现应按现实时间解锁，而不是游戏帧时间');
+
+    // 使用提示后进入 45 秒冷却，冷却也按现实时间结束
+    final pair = c.useHint();
+    expect(pair, isNotNull);
+    expect(c.hintReady, isFalse);
+    nowMs += 46000;
+    expect(c.hintReady, isTrue, reason: '45 秒冷却按现实时间结束');
+
+    // 弹窗按现实时间自动消失
+    c.showToast('测试弹窗');
+    expect(c.toast, isNotNull);
+    nowMs += 3000;
+    c.tick(0.1);
+    expect(c.toast, isNull);
   });
 }

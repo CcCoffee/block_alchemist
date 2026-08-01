@@ -32,7 +32,10 @@ class _AlchemistScreenState extends ConsumerState<AlchemistScreen>
   }
 
   void _onTick(Duration elapsed) {
-    final dt = (elapsed - _last).inMicroseconds / 1e6;
+    // 与网页版一致：单帧最多推进 50ms，切后台回来时动画不会瞬间跳完
+    final dt = ((elapsed - _last).inMicroseconds / 1e6)
+        .clamp(0.0, 0.05)
+        .toDouble();
     _last = elapsed;
     if (dt > 0) {
       ref.read(gameControllerProvider.notifier).tick(dt);
