@@ -3,21 +3,41 @@
 .AppleDouble
 .LSOverride
 
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+
 # 编辑器 / IDE
 .vscode/
 .idea/
+.fleet/
+.history/
 *.swp
 *.swo
+*.iml
 
 # 日志与临时文件
 *.log
 *.tmp
+*.bak
+*.orig
 __pycache__/
 *.pyc
 
 # 环境与密钥
 .env
 .env.local
+*.secret
 
 # 依赖目录（本项目纯前端无依赖，预留）
 node_modules/
+
+# 构建产物（预留）
+dist/
+build/

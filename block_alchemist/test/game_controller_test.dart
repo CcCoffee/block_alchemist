@@ -1,0 +1,156 @@
+import 'package:block_alchemist/core/storage/game_storage.dart';
+import 'package:block_alchemist/features/alchemist/data/elements.dart';
+import 'package:block_alchemist/features/alchemist/game_controller.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    GameStorage.instance.resetForTest();
+    await GameStorage.instance.init();
+  });
+
+  test('新开局：地图有火与水，四个初始元素已解锁', () {
+    final c = GameController(GameStorage.instance);
+    expect(c.allBlocks(), hasLength(2));
+    expect(c.discoveredCount, 4);
+    expect(c.boardSize, 6);
+  });
+
+  test('放置 / 合成 / 连锁：火+水=蒸汽，土+火=熔岩', () {
+    final c = GameController(GameStorage.instance);
+    final cell = c.randomEmptyCell()!;
+    expect(c.placeElement('earth', cell.$1, cell.$2), isTrue);
+    expect(c.placeElement('gem', cell.$1, cell.$2), isFalse,
+        reason: '未发现的元素不能放置');
+
+    final fire = c.allBlocks().firstWhere((b) => b.elementId == 'fire');
+    final water = c.allBlocks().firstWhere((b) => b.elementId == 'water');
+    c.performMerge(fire, water);
+    c.tick(0.5);
+    expect(c.allBlocks().any((b) => b.elementId == 'steam'), isTrue);
+    expect(c.discovered.contains('steam'), isTrue);
+    expect(c.score, greaterThanOrEqualTo(10));
+
+    // 火已被合成消耗，再造一个火
+    final newCell = c.randomEmptyCell()!;
+    c.placeElement('fire', newCell.$1, newCell.$2);
+    final earth = c.allBlocks().firstWhere((b) => b.elementId == 'earth');
+    final fire2 = c.allBlocks().firstWhere((b) => b.elementId == 'fire');
+    c.performMerge(earth, fire2);
+    c.tick(0.5);
+    expect(c.allBlocks().any((b) => b.elementId == 'lava'), isTrue);
+  });
+
+  test('放置方块后，弹出动画期间持续通知重绘（不会停留在小尺寸）', () {
+    final c = GameController(GameStorage.instance);
+    var notifies = 0;
+    c.addListener(() => notifies++);
+
+    final cell = c.randomEmptyCell()!;
+    c.placeElement('earth', cell.$1, cell.$2);
+    notifies = 0;
+
+    // 弹出动画窗口（0.3s）内模拟 5 帧
+    for (var i = 0; i < 5; i++) {
+      c.tick(0.05);
+    }
+    expect(notifies, greaterThan(0),
+        reason: '弹出动画期间应持续通知重绘');
+
+    notifies = 0;
+    c.tick(1.0); // 动画结束后不再需要重绘
+    expect(notifies, 0);
+  });
+
+  test('材料栏：轻点自动放置，长按未拖动不放置', () {
+    final c = GameController(GameStorage.instance);
+    final before = c.allBlocks().length;
+    c.tapTrayChip('earth');
+    expect(c.allBlocks().length, before + 1);
+    expect(c.allBlocks().any((b) => b.elementId == 'earth'), isTrue);
+
+    final before2 = c.allBlocks().length;
+    c.startTrayDrag('earth', Offset.zero);
+    c.endTrayDrag(Offset.zero); // 长按后未移动就松手 -> 取消
+    expect(c.allBlocks().length, before2, reason: '长按未拖动不应放置方块');
+    expect(c.drag, isNull);
+  });
+
+  test('灾害方块存在期间持续通知重绘（脉动动画不停）', () {
+    final c = GameController(GameStorage.instance);
+    for (final id in kElements.map((e) => e.id).take(16)) {
+      c.discover(id);
+    }
+    c.spawnDisaster();
+
+    var notifies = 0;
+    c.addListener(() => notifies++);
+
+    // 越过弹出动画窗口后，灾害方块仍应持续重绘
+    c.tick(0.5);
+    notifies = 0;
+    c.tick(0.05);
+    expect(notifies, greaterThan(0), reason: '灾害方块应持续脉动重绘');
+    c.tick(0.05);
+    expect(notifies, greaterThan(0), reason: '后续每帧都应继续重绘');
+  });
+
+  test('世界成长：探索数提升后地图扩大', () {
+    final c = GameController(GameStorage.instance);
+    final others =
+        kElements.map((e) => e.id).where((id) => !c.discovered.contains(id)).toList();
+    for (final id in others.take(21)) {
+      c.discover(id);
+    }
+    // 触发一次合成，内部会更新世界等级
+    final a = c.randomEmptyCell()!;
+    final b = c.randomEmptyCell()!;
+    c.placeElement('earth', a.$1, a.$2);
+    c.placeElement('earth', b.$1, b.$2);
+    final ea = c.get(a.$1, a.$2)!;
+    final eb = c.get(b.$1, b.$2)!;
+    c.performMerge(ea, eb);
+    c.tick(0.5);
+    expect(c.discoveredCount, greaterThanOrEqualTo(25));
+    expect(c.boardSize, 7, reason: '世界等级提升后地图应扩大');
+  });
+
+  test('灾害事件：降临并自动消退', () {
+    final c = GameController(GameStorage.instance);
+    for (final id in kElements.map((e) => e.id).take(16)) {
+      c.discover(id);
+    }
+    c.spawnDisaster();
+    final disaster = c.allBlocks().where((b) => b.expiresAt != null).toList();
+    expect(disaster, isNotEmpty);
+    expect(c.discovered.contains(disaster.first.elementId), isTrue);
+    disaster.first.expiresAt = c.gameTime - 1;
+    c.tick(0.1);
+    expect(c.allBlocks().any((b) => b.expiresAt != null), isFalse);
+  });
+
+  test('存档与读档：图鉴、分数、地图都能恢复', () {
+    final c = GameController(GameStorage.instance);
+    final fire = c.allBlocks().firstWhere((b) => b.elementId == 'fire');
+    final water = c.allBlocks().firstWhere((b) => b.elementId == 'water');
+    c.performMerge(fire, water);
+    c.tick(0.5);
+    c.save();
+
+    final c2 = GameController(GameStorage.instance);
+    expect(c2.discovered.contains('steam'), isTrue);
+    expect(c2.score, c.score);
+    expect(c2.allBlocks(), isNotEmpty);
+  });
+
+  test('重置存档：只保留初始元素', () {
+    final c = GameController(GameStorage.instance);
+    c.resetGame();
+    expect(c.discoveredCount, 4);
+    expect(c.score, 0);
+  });
+}
