@@ -48,6 +48,9 @@
       </div>
     </header>
 
+    <!-- ======== 世界目标 ======== -->
+    <div id="goals" class="goals"></div>
+
     <p class="hint">🖐 从下方材料栏拖出方块放到地图，再把两个方块拖到一起：火 + 水 = 蒸汽？土 + 雨 = 种子？去发现世界吧！</p>
 
     <!-- ======== 地图 + 详情 ======== -->
@@ -100,6 +103,7 @@
     <footer class="footer">
       <button id="btn-codex" class="btn ghost">📖 图鉴</button>
       <button id="btn-records" class="btn ghost">📜 解锁记录</button>
+      <button id="btn-hint" class="btn ghost" title="连续失败几次或长时间没有新发现后可获取线索">💡 提示</button>
       <button id="btn-reset" class="btn ghost">🗑 重置存档</button>
     </footer>
   </div>
@@ -148,6 +152,17 @@
           <li>每发现一个新元素，世界就会成长：植物 → 动物 → 村落 → 城市 → 科技 → 星际文明</li>
           <li>地图会随世界等级从 6×6 扩大到 8×8</li>
           <li>自然 / 科技 / 繁荣三条属性由地图上的方块共同决定</li>
+        </ul>
+        <h3>🎯 世界目标</h3>
+        <ul>
+          <li>顶部会同时展示 3 个目标：发现某种元素、凑齐某类图鉴、完成合成次数等</li>
+          <li>完成目标会奖励炼金点，并立即刷新一个新目标</li>
+          <li>材料栏方块上的 🔗N 表示它还能参与合成 N 种未知元素</li>
+        </ul>
+        <h3>💡 卡住提示</h3>
+        <ul>
+          <li>连续失败几次，或 90 秒没有新发现时，底部 💡 提示按钮会亮起</li>
+          <li>点击它会得到一条线索：两个已发现的元素之间藏着秘密配方</li>
         </ul>
         <h3>⚠️ 灾害事件</h3>
         <ul>

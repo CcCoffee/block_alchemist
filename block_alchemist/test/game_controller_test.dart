@@ -24,8 +24,11 @@ void main() {
     final c = GameController(GameStorage.instance);
     final cell = c.randomEmptyCell()!;
     expect(c.placeElement('earth', cell.$1, cell.$2), isTrue);
-    expect(c.placeElement('gem', cell.$1, cell.$2), isFalse,
-        reason: '未发现的元素不能放置');
+    expect(
+      c.placeElement('gem', cell.$1, cell.$2),
+      isFalse,
+      reason: '未发现的元素不能放置',
+    );
 
     final fire = c.allBlocks().firstWhere((b) => b.elementId == 'fire');
     final water = c.allBlocks().firstWhere((b) => b.elementId == 'water');
@@ -58,8 +61,7 @@ void main() {
     for (var i = 0; i < 5; i++) {
       c.tick(0.05);
     }
-    expect(notifies, greaterThan(0),
-        reason: '弹出动画期间应持续通知重绘');
+    expect(notifies, greaterThan(0), reason: '弹出动画期间应持续通知重绘');
 
     notifies = 0;
     c.tick(1.0); // 动画结束后不再需要重绘
@@ -101,8 +103,10 @@ void main() {
 
   test('世界成长：探索数提升后地图扩大', () {
     final c = GameController(GameStorage.instance);
-    final others =
-        kElements.map((e) => e.id).where((id) => !c.discovered.contains(id)).toList();
+    final others = kElements
+        .map((e) => e.id)
+        .where((id) => !c.discovered.contains(id))
+        .toList();
     for (final id in others.take(21)) {
       c.discover(id);
     }
@@ -152,5 +156,58 @@ void main() {
     c.resetGame();
     expect(c.discoveredCount, 4);
     expect(c.score, 0);
+  });
+
+  test('世界目标：新开局 3 个目标，完成合成目标后奖励并刷新', () {
+    final c = GameController(GameStorage.instance);
+    expect(c.goals, hasLength(3));
+
+    // 强制替换成一个马上能完成的合成目标
+    c.goals = <Goal>[const Goal(kind: 'merge', target: 1, reward: 50)];
+    final fire = c.allBlocks().firstWhere((b) => b.elementId == 'fire');
+    final water = c.allBlocks().firstWhere((b) => b.elementId == 'water');
+    final scoreBefore = c.score;
+    c.performMerge(fire, water);
+    c.tick(0.5);
+
+    expect(c.mergeCount, 1);
+    expect(
+      c.score,
+      greaterThanOrEqualTo(scoreBefore + 50 + 10),
+      reason: '合成价值 + 目标奖励都应入账',
+    );
+    expect(c.goals.single.key, isNot('merge||1'), reason: '完成的目标应立即被新目标替换');
+  });
+
+  test('世界目标：存档后目标列表能恢复', () {
+    final c = GameController(GameStorage.instance);
+    expect(c.goals, hasLength(3));
+    c.save();
+
+    final c2 = GameController(GameStorage.instance);
+    expect(c2.goals, hasLength(3));
+    expect(c2.goals.map((g) => g.key), c.goals.map((g) => g.key));
+  });
+
+  test('卡住提示：连续失败 3 次后可用，线索材料均已发现且产物未发现', () {
+    final c = GameController(GameStorage.instance);
+    expect(c.hintReady, isFalse);
+
+    final bs = c.allBlocks();
+    c.rejectMerge(bs[0], bs[1]);
+    c.rejectMerge(bs[0], bs[1]);
+    c.rejectMerge(bs[0], bs[1]);
+    expect(c.hintReady, isTrue, reason: '连续失败 3 次应解锁提示');
+
+    final pair = c.useHint();
+    expect(pair, isNotNull);
+    expect(c.discovered.contains(pair!.$1), isTrue);
+    expect(c.discovered.contains(pair.$2), isTrue);
+    final rid = findRecipe(pair.$1, pair.$2);
+    expect(rid, isNotNull);
+    expect(c.discovered.contains(rid), isFalse, reason: '提示不应指向已发现的产物');
+
+    expect(c.failStreak, 0, reason: '使用提示后失败计数清零');
+    expect(c.hintReady, isFalse, reason: '提示后有冷却');
   });
 }

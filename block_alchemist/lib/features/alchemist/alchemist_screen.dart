@@ -6,6 +6,7 @@ import 'data/elements.dart';
 import 'game_controller.dart';
 import 'board_painter.dart';
 import 'widgets/codex_sheet.dart';
+import 'widgets/goal_bar.dart';
 import 'widgets/help_sheet.dart';
 import 'widgets/selection_panel.dart';
 import 'widgets/tray_bar.dart';
@@ -55,24 +56,26 @@ class _AlchemistScreenState extends ConsumerState<AlchemistScreen>
     final isWide = MediaQuery.sizeOf(context).width >= 640;
     final compact = !isWide;
     // 手机端：选中方块时弹出底部详情面板
-    ref.listen<int>(
-      gameControllerProvider.select((c) => c.selectionRev),
-      (prev, next) {
-        if (next > (prev ?? 0) &&
-            !isWide &&
-            ref.read(gameControllerProvider).selected != null) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) showSelectionSheet(context);
-          });
-        }
-      },
-    );
+    ref.listen<int>(gameControllerProvider.select((c) => c.selectionRev), (
+      prev,
+      next,
+    ) {
+      if (next > (prev ?? 0) &&
+          !isWide &&
+          ref.read(gameControllerProvider).selected != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) showSelectionSheet(context);
+        });
+      }
+    });
 
     final score = ref.watch(gameControllerProvider.select((c) => c.score));
-    final discovered =
-        ref.watch(gameControllerProvider.select((c) => c.discoveredCount));
-    final worldLabel =
-        ref.watch(gameControllerProvider.select((c) => c.worldLabel));
+    final discovered = ref.watch(
+      gameControllerProvider.select((c) => c.discoveredCount),
+    );
+    final worldLabel = ref.watch(
+      gameControllerProvider.select((c) => c.worldLabel),
+    );
     final bars = ref.watch(gameControllerProvider.select((c) => c.calcBars()));
     final toast = ref.watch(gameControllerProvider.select((c) => c.toast));
 
@@ -87,21 +90,32 @@ class _AlchemistScreenState extends ConsumerState<AlchemistScreen>
                     padding: const EdgeInsets.all(10),
                     child: Column(
                       children: [
-                        _buildHeader(context, score, discovered, worldLabel, bars),
+                        _buildHeader(
+                          context,
+                          score,
+                          discovered,
+                          worldLabel,
+                          bars,
+                        ),
+                        const SizedBox(height: 8),
+                        const GoalBar(),
                         const SizedBox(height: 8),
                         // 手机端省略提示行，把高度让给棋盘
                         if (!compact)
                           const Text(
-                          '🖐 长按材料栏元素拖到地图，把两个方块拖到一起尝试合成！',
+                            '🖐 长按材料栏元素拖到地图，把两个方块拖到一起尝试合成！',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                                fontSize: 11, color: Color(0xFF8A93B5)),
+                              fontSize: 11,
+                              color: Color(0xFF8A93B5),
+                            ),
                           ),
                         const SizedBox(height: 10),
                         Expanded(
                           child: isWide
                               ? Row(
-                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
                                   children: [
                                     Expanded(
                                       child: Center(
@@ -165,11 +179,13 @@ class _AlchemistScreenState extends ConsumerState<AlchemistScreen>
                   fontSize: compact ? 21 : 24,
                   fontWeight: FontWeight.w800,
                   foreground: Paint()
-                    ..shader = const LinearGradient(colors: [
-                      Color(0xFF8FB6FF),
-                      Color(0xFFC39AFF),
-                      Color(0xFFFFD34D),
-                    ]).createShader(const Rect.fromLTWH(0, 0, 240, 30)),
+                    ..shader = const LinearGradient(
+                      colors: [
+                        Color(0xFF8FB6FF),
+                        Color(0xFFC39AFF),
+                        Color(0xFFFFD34D),
+                      ],
+                    ).createShader(const Rect.fromLTWH(0, 0, 240, 30)),
                 ),
               ),
             ),
@@ -193,13 +209,13 @@ class _AlchemistScreenState extends ConsumerState<AlchemistScreen>
         SizedBox(height: compact ? 6 : 8),
         Row(
           children: [
-            _StatCard(
-                label: '炼金点', value: score.toString(), compact: compact),
+            _StatCard(label: '炼金点', value: score.toString(), compact: compact),
             const SizedBox(width: 6),
             _StatCard(
-                label: '探索进度',
-                value: '$discovered/${kElements.length}',
-                compact: compact),
+              label: '探索进度',
+              value: '$discovered/${kElements.length}',
+              compact: compact,
+            ),
             const SizedBox(width: 6),
             _StatCard(label: '世界等级', value: worldLabel, compact: compact),
           ],
@@ -209,23 +225,42 @@ class _AlchemistScreenState extends ConsumerState<AlchemistScreen>
           Row(
             children: [
               _MiniBar(
-                  label: '🌿', value: bars.nature, color: const Color(0xFF58D68D)),
+                label: '🌿',
+                value: bars.nature,
+                color: const Color(0xFF58D68D),
+              ),
               const SizedBox(width: 6),
               _MiniBar(
-                  label: '⚙️', value: bars.tech, color: const Color(0xFF4DA3FF)),
+                label: '⚙️',
+                value: bars.tech,
+                color: const Color(0xFF4DA3FF),
+              ),
               const SizedBox(width: 6),
               _MiniBar(
-                  label: '🏛️',
-                  value: bars.prosperity,
-                  color: const Color(0xFFFFB62E)),
+                label: '🏛️',
+                value: bars.prosperity,
+                color: const Color(0xFFFFB62E),
+              ),
             ],
           )
         else ...[
-          _WorldBar(label: '🌿 自然', value: bars.nature, color: const Color(0xFF58D68D)),
+          _WorldBar(
+            label: '🌿 自然',
+            value: bars.nature,
+            color: const Color(0xFF58D68D),
+          ),
           const SizedBox(height: 4),
-          _WorldBar(label: '⚙️ 科技', value: bars.tech, color: const Color(0xFF4DA3FF)),
+          _WorldBar(
+            label: '⚙️ 科技',
+            value: bars.tech,
+            color: const Color(0xFF4DA3FF),
+          ),
           const SizedBox(height: 4),
-          _WorldBar(label: '🏛️ 繁荣', value: bars.prosperity, color: const Color(0xFFFFB62E)),
+          _WorldBar(
+            label: '🏛️ 繁荣',
+            value: bars.prosperity,
+            color: const Color(0xFFFFB62E),
+          ),
         ],
       ],
     );
@@ -234,6 +269,13 @@ class _AlchemistScreenState extends ConsumerState<AlchemistScreen>
   Widget _buildFooter(BuildContext context) {
     return Row(
       children: [
+        Expanded(
+          child: _HintButton(
+            ready: ref.watch(gameControllerProvider.select((c) => c.hintReady)),
+            onTap: () => ref.read(gameControllerProvider.notifier).useHint(),
+          ),
+        ),
+        const SizedBox(width: 8),
         Expanded(
           child: _FooterButton(
             icon: '📖',
@@ -294,8 +336,7 @@ class _AlchemistScreenState extends ConsumerState<AlchemistScreen>
           duration: const Duration(milliseconds: 250),
           child: Container(
             constraints: const BoxConstraints(maxWidth: 420),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             decoration: BoxDecoration(
               color: const Color(0xE62B1B4D),
               borderRadius: BorderRadius.circular(999),
@@ -307,8 +348,7 @@ class _AlchemistScreenState extends ConsumerState<AlchemistScreen>
             child: Text(
               msg ?? '',
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w700),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
             ),
           ),
         ),
@@ -331,8 +371,7 @@ class _StatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Expanded(
       child: Container(
-        padding: EdgeInsets.symmetric(
-            vertical: compact ? 5 : 8, horizontal: 4),
+        padding: EdgeInsets.symmetric(vertical: compact ? 5 : 8, horizontal: 4),
         decoration: BoxDecoration(
           color: const Color(0x1F6EA8FF),
           borderRadius: BorderRadius.circular(12),
@@ -340,18 +379,24 @@ class _StatCard extends StatelessWidget {
         ),
         child: Column(
           children: [
-            Text(label,
-                style: TextStyle(
-                    fontSize: compact ? 9 : 10,
-                    color: Color(0xFF8A93B5),
-                    letterSpacing: 1)),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: compact ? 9 : 10,
+                color: Color(0xFF8A93B5),
+                letterSpacing: 1,
+              ),
+            ),
             SizedBox(height: compact ? 0 : 2),
-            Text(value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontSize: compact ? 14 : 15,
-                    fontWeight: FontWeight.w800)),
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: compact ? 14 : 15,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ],
         ),
       ),
@@ -376,8 +421,10 @@ class _MiniBar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('$label $value',
-              style: const TextStyle(fontSize: 9, color: Color(0xFF8A93B5))),
+          Text(
+            '$label $value',
+            style: const TextStyle(fontSize: 9, color: Color(0xFF8A93B5)),
+          ),
           const SizedBox(height: 2),
           ClipRRect(
             borderRadius: BorderRadius.circular(999),
@@ -410,8 +457,10 @@ class _WorldBar extends StatelessWidget {
       children: [
         SizedBox(
           width: 74,
-          child: Text(label,
-              style: const TextStyle(fontSize: 11, color: Color(0xFF8A93B5))),
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 11, color: Color(0xFF8A93B5)),
+          ),
         ),
         Expanded(
           child: ClipRRect(
@@ -455,10 +504,60 @@ class _FooterButton extends StatelessWidget {
           children: [
             Text(icon, style: const TextStyle(fontSize: 16)),
             const SizedBox(width: 6),
-            Text(label,
-                style: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w700)),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 卡住提示按钮：就绪时高亮脉冲，点击给出一条合成线索
+class _HintButton extends StatelessWidget {
+  const _HintButton({required this.ready, required this.onTap});
+  final bool ready;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      decoration: BoxDecoration(
+        color: ready ? const Color(0x24FFD34D) : const Color(0x0DFFFFFF),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: ready ? const Color(0xB3FFD34D) : const Color(0x17FFFFFF),
+        ),
+        boxShadow: ready
+            ? const [BoxShadow(color: Color(0x59FFD34D), blurRadius: 14)]
+            : null,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(ready ? '💡' : '🔕', style: const TextStyle(fontSize: 16)),
+                const SizedBox(width: 6),
+                Text(
+                  ready ? '提示!' : '提示',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: ready ? const Color(0xFFFFD34D) : null,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

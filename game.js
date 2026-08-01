@@ -94,6 +94,176 @@ const storage = {
   },
 };
 
+/* ------------------------------ 世界目标 ------------------------------ */
+
+/** 目标模板：kind 支持 type（发现某类型元素）/ element（发现指定元素）/
+ *  merge（合成次数）/ score（累计积分）。reward 为目标完成奖励。 */
+const GOAL_TEMPLATES = [
+  { kind: 'type',   type: '动物', target: 3,  reward: 80 },
+  { kind: 'type',   type: '植物', target: 4,  reward: 80 },
+  { kind: 'type',   type: '工具', target: 2,  reward: 80 },
+  { kind: 'type',   type: '建筑', target: 3,  reward: 100 },
+  { kind: 'type',   type: '科技', target: 2,  reward: 120 },
+  { kind: 'type',   type: '文明', target: 2,  reward: 120 },
+  { kind: 'type',   type: '食物', target: 4,  reward: 80 },
+  { kind: 'type',   type: '神话', target: 2,  reward: 150 },
+  { kind: 'element', elementId: 'rainbow',     target: 1, reward: 120 },
+  { kind: 'element', elementId: 'city',        target: 1, reward: 150 },
+  { kind: 'element', elementId: 'electricity', target: 1, reward: 100 },
+  { kind: 'element', elementId: 'robot',       target: 1, reward: 150 },
+  { kind: 'element', elementId: 'airplane',    target: 1, reward: 120 },
+  { kind: 'element', elementId: 'library',     target: 1, reward: 120 },
+  { kind: 'element', elementId: 'rocket',      target: 1, reward: 180 },
+  { kind: 'element', elementId: 'dragon',      target: 1, reward: 200 },
+  { kind: 'element', elementId: 'phoenix',     target: 1, reward: 200 },
+  { kind: 'element', elementId: 'mermaid',     target: 1, reward: 150 },
+  { kind: 'merge', target: 10, reward: 100 },
+  { kind: 'merge', target: 30, reward: 150 },
+  { kind: 'merge', target: 60, reward: 250 },
+  { kind: 'score', target: 500,  reward: 100 },
+  { kind: 'score', target: 2000, reward: 200 },
+  { kind: 'score', target: 5000, reward: 400 },
+];
+
+/** 目标卡片图标（按类型 / 种类） */
+const GOAL_TYPE_ICONS = {
+  动物: '🐾', 植物: '🌱', 工具: '🛠️', 建筑: '🏗️',
+  科技: '⚙️', 文明: '🏛️', 食物: '🍲', 神话: '✨',
+};
+const GOAL_KIND_ICONS = { merge: '🔗', score: '💰' };
+
+function shuffle(arr) {
+  const out = arr.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+function templateKey(t) {
+  return `${t.kind}|${t.type || t.elementId || ''}|${t.target}`;
+}
+
+function goalKey(g) {
+  return templateKey(g);
+}
+
+/** 目标文案 */
+function goalLabelOf(g) {
+  switch (g.kind) {
+    case 'type':
+      return `发现 ${g.target} 种${g.type}`;
+    case 'element': {
+      const e = ELEMENTS_BY_ID[g.elementId];
+      return e ? `发现 ${e.emoji} ${e.name}` : `发现 ${g.elementId}`;
+    }
+    case 'merge':
+      return `完成 ${g.target} 次合成`;
+    case 'score':
+      return `累计获得 ${g.target} 炼金点`;
+    default:
+      return '';
+  }
+}
+
+/** 目标当前进度：state = { discovered:Set, mergeCount, score } */
+function goalProgressOf(g, state) {
+  if (g.kind === 'type') {
+    let n = 0;
+    for (const id of state.discovered) {
+      if (ELEMENTS_BY_ID[id] && ELEMENTS_BY_ID[id].type === g.type) n++;
+    }
+    return n;
+  }
+  if (g.kind === 'element') return state.discovered.has(g.elementId) ? 1 : 0;
+  if (g.kind === 'merge') return state.mergeCount;
+  if (g.kind === 'score') return state.score;
+  return 0;
+}
+
+/** 模板在当前图鉴下是否可行（不会被已经达成的条件卡死） */
+function goalFeasible(t, discoveredSet) {
+  if (t.kind === 'element') return !discoveredSet.has(t.elementId);
+  if (t.kind === 'type') {
+    let n = 0;
+    for (const e of ELEMENTS) {
+      if (e.type === t.type && !discoveredSet.has(e.id)) n++;
+    }
+    return n >= t.target;
+  }
+  return true; // merge / score 永远可行
+}
+
+/** 生成一组新目标（默认 3 个）；excludeKeys 用于换掉已完成目标时不重复 */
+function makeGoals(discoveredSet, excludeKeys = [], count = 3) {
+  const pool = shuffle(GOAL_TEMPLATES).filter(
+    (t) => goalFeasible(t, discoveredSet) && !excludeKeys.includes(templateKey(t)),
+  );
+  const out = [];
+  for (const t of pool) {
+    out.push({ ...t, progress: 0, done: false });
+    if (out.length >= count) break;
+  }
+  // 兜底：极端情况下模板不足时生成合成目标
+  let i = 0;
+  while (out.length < count) {
+    out.push({ kind: 'merge', target: 5 + i * 3, reward: 50 + i * 20, progress: 0, done: false });
+    i++;
+  }
+  return out;
+}
+
+/** 计算每个元素从初始元素出发的最小配方深度（缓存复用） */
+function computeRecipeDepth() {
+  const depth = new Map(STARTER_IDS.map((id) => [id, 0]));
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const e of ELEMENTS) {
+      if (depth.has(e.id)) continue;
+      let best = Infinity;
+      for (const [a, b] of e.recipes) {
+        const da = depth.get(a);
+        const db = depth.get(b);
+        if (da !== undefined && db !== undefined) {
+          best = Math.min(best, Math.max(da, db) + 1);
+        }
+      }
+      if (best < (depth.get(e.id) ?? Infinity)) {
+        depth.set(e.id, best);
+        changed = true;
+      }
+    }
+  }
+  return depth;
+}
+
+/**
+ * 挑选一条卡住提示：找“两个材料都已发现、但产物未发现”的配方，
+ * 优先浅层配方（depth<=4），避免提示深不见底的传说元素。
+ * 返回 [材料A, 材料B] 或 null。
+ */
+function pickHintPair(discoveredSet, depthMap) {
+  const candidates = [];
+  const shallow = [];
+  for (const e of ELEMENTS) {
+    if (discoveredSet.has(e.id) || e.type === '灾害') continue;
+    for (const [a, b] of e.recipes) {
+      if (discoveredSet.has(a) && discoveredSet.has(b)) {
+        const d = depthMap.get(e.id) ?? 99;
+        candidates.push({ a, b });
+        if (d <= 4) shallow.push({ a, b });
+        break; // 每个元素只给一条候选，避免偏向配方多的元素
+      }
+    }
+  }
+  const pool = shallow.length ? shallow : candidates;
+  if (!pool.length) return null;
+  const pick = randOf(pool);
+  return [pick.a, pick.b];
+}
+
 /* ============================ 音效 ============================ */
 
 class AudioManager {
@@ -410,6 +580,13 @@ class Game {
     this.worldIndex = -1;
     this.last = performance.now();
     this.toastTimer = null;
+    this.mergeCount = 0;          // 累计成功合成次数（目标进度）
+    this.failStreak = 0;          // 连续失败次数（卡住判定）
+    this.lastDiscoveryAt = performance.now(); // 上次新发现时间
+    this.lastHintAt = -Infinity;  // 上次使用提示的时间
+    this.hintCheckTimer = 0;
+    this.depthMap = null;         // 配方深度缓存
+    this.goals = [];              // 世界目标（3 个）
 
     /* ----- 存档或新开局 ----- */
     const save = this.saveMgr.load();
@@ -434,7 +611,12 @@ class Game {
 
   applySave(d) {
     this.score = Number(d.score) || 0;
+    this.mergeCount = Math.max(0, parseInt(d.mergeCount, 10) || 0);
     this.encyclopedia.fromData({ discovered: d.discovered, records: d.records });
+    this.goals = Array.isArray(d.goals)
+      ? d.goals.filter((g) => g && typeof g.kind === 'string' && g.target > 0)
+      : [];
+    if (!this.goals.length) this.goals = makeGoals(this.encyclopedia.discovered);
     const size = clampNum(parseInt(d.size, 10) || 6, 6, 8);
     this.board = new Board(size);
     if (Array.isArray(d.grid)) {
@@ -467,8 +649,10 @@ class Game {
     }
     this.saveMgr.save({
       score: this.score,
+      mergeCount: this.mergeCount,
       discovered: this.encyclopedia.toData().discovered,
       records: this.encyclopedia.toData().records,
+      goals: this.goals,
       grid,
       size,
     });
@@ -480,11 +664,17 @@ class Game {
     this.encyclopedia.clear();
     this.board = new Board(6);
     this.score = 0;
+    this.mergeCount = 0;
+    this.failStreak = 0;
+    this.lastDiscoveryAt = performance.now();
+    this.lastHintAt = -Infinity;
+    this.goals = makeGoals(this.encyclopedia.discovered);
     this.clearSelection();
     this.seedBoard();
     this.updateWorld(false);
     this.updateHud();
     this.renderTray();
+    this.updateHintBtn();
     this.showToast('🗑 已重置存档，重新开始探索吧');
   }
 
@@ -537,6 +727,105 @@ class Game {
     this.barNature.style.width = bars.nature + '%';
     this.barTech.style.width = bars.tech + '%';
     this.barProsperity.style.width = bars.prosperity + '%';
+    this.updateGoals();
+    this.renderGoals();
+    this.updateHintBtn();
+  }
+
+  /* ================= 世界目标 ================= */
+
+  goalIcon(g) {
+    if (g.kind === 'type') return GOAL_TYPE_ICONS[g.type] || '🧩';
+    if (g.kind === 'element') return (ELEMENTS_BY_ID[g.elementId] || {}).emoji || '🎯';
+    return GOAL_KIND_ICONS[g.kind] || '🎯';
+  }
+
+  goalState() {
+    return {
+      discovered: this.encyclopedia.discovered,
+      mergeCount: this.mergeCount,
+      score: this.score,
+    };
+  }
+
+  /** 检查目标进度；完成后发奖励并立即换一个新目标 */
+  updateGoals() {
+    if (!this.goals.length) return;
+    const state = this.goalState();
+    let completed = false;
+    for (let i = 0; i < this.goals.length; i++) {
+      const g = this.goals[i];
+      if (g.done || goalProgressOf(g, state) < g.target) continue;
+      g.done = true;
+      this.score += g.reward;
+      this.audio.play('achievement');
+      this.showToast(`🎯 目标完成：${goalLabelOf(g)} +${g.reward} 炼金点`);
+      const exclude = this.goals.map(goalKey);
+      const fresh = makeGoals(this.encyclopedia.discovered, exclude, 1);
+      this.goals[i] = fresh[0];
+      completed = true;
+      break; // 完成一个就停下，避免奖励连锁刷新目标
+    }
+    if (completed) {
+      this.renderGoals();
+      this.autoSave();
+    }
+  }
+
+  renderGoals() {
+    const el = document.getElementById('goals');
+    if (!el) return;
+    const state = this.goalState();
+    el.innerHTML = this.goals.map((g) => {
+      const p = clampNum(goalProgressOf(g, state), 0, g.target);
+      const pct = g.target ? Math.round((p / g.target) * 100) : 0;
+      return `<div class="goal-card">
+        <div class="goal-icon">${this.goalIcon(g)}</div>
+        <div class="goal-body">
+          <div class="goal-label">${escapeHtml(goalLabelOf(g))}</div>
+          <div class="goal-progress"><div class="goal-fill" style="width:${pct}%"></div></div>
+        </div>
+        <div class="goal-num">${Math.min(p, g.target)}/${g.target}</div>
+        <div class="goal-reward">+${g.reward}</div>
+      </div>`;
+    }).join('');
+  }
+
+  /* ================= 卡住提示 ================= */
+
+  /** 连续失败>=3 次，或 90 秒没有新发现；且 45 秒冷却已过 */
+  hintReady() {
+    const now = performance.now();
+    const stuck = this.failStreak >= 3 || (now - this.lastDiscoveryAt) > 90000;
+    const cooldown = now - this.lastHintAt > 45000;
+    return stuck && cooldown;
+  }
+
+  useHint() {
+    if (!this.hintReady()) return;
+    if (!this.depthMap) this.depthMap = computeRecipeDepth();
+    const pair = pickHintPair(this.encyclopedia.discovered, this.depthMap);
+    if (!pair) {
+      this.showToast('暂时没有可提示的配方，继续探索吧');
+      return;
+    }
+    const a = ELEMENTS_BY_ID[pair[0]];
+    const b = ELEMENTS_BY_ID[pair[1]];
+    this.showToast(`💡 线索：${a.emoji} ${a.name} 与 ${b.emoji} ${b.name} 之间似乎藏着秘密…`);
+    this.failStreak = 0;
+    this.lastHintAt = performance.now();
+    this.audio.play('click');
+    this.updateHintBtn();
+  }
+
+  updateHintBtn() {
+    const btn = document.getElementById('btn-hint');
+    if (!btn) return;
+    const ready = this.hintReady();
+    btn.classList.toggle('ready', ready);
+    btn.title = ready
+      ? '点击获得一条合成线索'
+      : '连续失败几次，或长时间没有新发现后，可在这里获取线索';
   }
 
   /* ================= 画布尺寸与坐标 ================= */
@@ -582,6 +871,7 @@ class Game {
     document.getElementById('btn-records').addEventListener('click', () => this.openCodex('records'));
     document.getElementById('btn-reset').addEventListener('click', () => this.resetGame());
     document.getElementById('btn-delete').addEventListener('click', () => this.deleteSelected());
+    document.getElementById('btn-hint').addEventListener('click', () => this.useHint());
     document.getElementById('btn-mute').addEventListener('click', () => this.toggleMute());
     document.getElementById('btn-help').addEventListener('click', () => this.openModal('modal-help'));
     document.getElementById('tab-codex').addEventListener('click', () => this.switchCodexTab('codex'));
@@ -704,10 +994,14 @@ class Game {
       this.trayEl.innerHTML = '<div class="tray-empty">没有符合条件的元素</div>';
       return;
     }
-    this.trayEl.innerHTML = list.map((e) =>
-      `<div class="chip rar-${e.rarity}" data-id="${e.id}">` +
-      `<span class="chip-emoji">${e.emoji}</span><span>${e.name}</span></div>`
-    ).join('');
+    this.trayEl.innerHTML = list.map((e) => {
+      const unknown = getChildren(e.id)
+        .filter((c) => !this.encyclopedia.has(c.id)).length;
+      return `<div class="chip rar-${e.rarity}" data-id="${e.id}">` +
+        `<span class="chip-emoji">${e.emoji}</span><span>${e.name}</span>` +
+        (unknown ? `<span class="chip-pot">🔗${unknown}</span>` : '') +
+        `</div>`;
+    }).join('');
     this.trayEl.querySelectorAll('.chip').forEach((chip) => {
       chip.addEventListener('pointerdown', (e) => {
         e.preventDefault();
@@ -798,10 +1092,17 @@ class Game {
     this.board.set(anim.row, anim.col, result);
     const el = ELEMENTS_BY_ID[anim.rid];
     const isNew = this.encyclopedia.add(anim.rid);
+    this.mergeCount++;
+    this.failStreak = 0;
     this.score += el.attrs.value;
     if (isNew) {
+      this.lastDiscoveryAt = performance.now();
       this.audio.play('achievement');
-      this.showToast(`✨ 新发现：${el.emoji} ${el.name}！`);
+      const unknown = getChildren(anim.rid)
+        .filter((c) => !this.encyclopedia.has(c.id)).length;
+      this.showToast(unknown > 0
+        ? `✨ 新发现：${el.emoji} ${el.name}！它还能合成 ${unknown} 种未知元素`
+        : `✨ 新发现：${el.emoji} ${el.name}！`);
       const c = this.cellCenter(anim.row, anim.col);
       this.particles.burst(c.x, c.y, RARITY_INFO[el.rarity].color, 30, 130);
     }
@@ -818,6 +1119,8 @@ class Game {
     this.showToast(`${ea.emoji} ${ea.name} + ${eb.emoji} ${eb.name} 无法合成`);
     this.flashCell(a.row, a.col, 'rgba(255,90,90,0.55)');
     this.flashCell(b.row, b.col, 'rgba(255,90,90,0.55)');
+    this.failStreak++;
+    this.updateHintBtn();
   }
 
   /* ================= 选中与删除 ================= */
@@ -1086,6 +1389,12 @@ class Game {
     this.updateAnims(dt);
     this.updateEvents(dt);
     this.updateDisasters();
+    // 每秒检查一次提示按钮是否变为可用（长时间无发现时）
+    this.hintCheckTimer += dt;
+    if (this.hintCheckTimer >= 1) {
+      this.hintCheckTimer = 0;
+      this.updateHintBtn();
+    }
   }
 
   /* ================= 渲染 ================= */

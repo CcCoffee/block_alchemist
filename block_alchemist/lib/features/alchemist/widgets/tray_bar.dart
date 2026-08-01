@@ -60,8 +60,10 @@ class _TrayBarState extends ConsumerState<TrayBar> {
                   decoration: const InputDecoration(
                     hintText: '搜索已发现的元素…',
                     isDense: true,
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                   ),
                 ),
               ),
@@ -82,9 +84,7 @@ class _TrayBarState extends ConsumerState<TrayBar> {
               ),
               IconButton(
                 tooltip: _expanded ? '收起材料栏' : '展开材料栏',
-                icon: Icon(
-                  _expanded ? Icons.expand_less : Icons.expand_more,
-                ),
+                icon: Icon(_expanded ? Icons.expand_less : Icons.expand_more),
                 onPressed: () => setState(() => _expanded = !_expanded),
               ),
             ],
@@ -93,8 +93,10 @@ class _TrayBarState extends ConsumerState<TrayBar> {
           if (list.isEmpty)
             const Padding(
               padding: EdgeInsets.all(12),
-              child: Text('没有符合条件的元素',
-                  style: TextStyle(color: Color(0xFF8A93B5))),
+              child: Text(
+                '没有符合条件的元素',
+                style: TextStyle(color: Color(0xFF8A93B5)),
+              ),
             )
           else if (!_expanded)
             // 收起状态：固定两行高度 + 横向滚动，
@@ -201,10 +203,7 @@ class _EdgeFade extends StatelessWidget {
             gradient: LinearGradient(
               begin: left ? Alignment.centerLeft : Alignment.centerRight,
               end: left ? Alignment.centerRight : Alignment.centerLeft,
-              colors: const [
-                Color(0xE6161D33),
-                Color(0x00161D33),
-              ],
+              colors: const [Color(0xE6161D33), Color(0x00161D33)],
             ),
           ),
         ),
@@ -232,10 +231,7 @@ class _VerticalFade extends StatelessWidget {
             gradient: LinearGradient(
               begin: top ? Alignment.topCenter : Alignment.bottomCenter,
               end: top ? Alignment.bottomCenter : Alignment.topCenter,
-              colors: const [
-                Color(0xE6161D33),
-                Color(0x00161D33),
-              ],
+              colors: const [Color(0xE6161D33), Color(0x00161D33)],
             ),
           ),
         ),
@@ -257,6 +253,7 @@ class _TrayChip extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.read(gameControllerProvider.notifier);
+    final unknown = controller.unknownChildren(element.id);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       // 轻点：自动放置到第一个空格；长按：进入拖拽（避免与横向滚动冲突）
@@ -267,12 +264,13 @@ class _TrayChip extends ConsumerWidget {
       },
       onLongPressMoveUpdate: (d) =>
           controller.updateDrag(toLocal(d.globalPosition)),
-      onLongPressEnd: (d) =>
-          controller.endTrayDrag(toLocal(d.globalPosition)),
+      onLongPressEnd: (d) => controller.endTrayDrag(toLocal(d.globalPosition)),
       onLongPressCancel: () => controller.cancelDrag(),
       child: Container(
         padding: EdgeInsets.symmetric(
-            horizontal: compact ? 9 : 12, vertical: compact ? 5 : 8),
+          horizontal: compact ? 9 : 12,
+          vertical: compact ? 5 : 8,
+        ),
         decoration: BoxDecoration(
           color: const Color(0x0FFFFFFF),
           borderRadius: BorderRadius.circular(12),
@@ -283,13 +281,33 @@ class _TrayChip extends ConsumerWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(element.emoji,
-                style: TextStyle(fontSize: compact ? 16 : 19)),
+            Text(element.emoji, style: TextStyle(fontSize: compact ? 16 : 19)),
             SizedBox(width: compact ? 4 : 6),
-            Text(element.name,
-                style: TextStyle(
-                    fontSize: compact ? 12 : 13,
-                    fontWeight: FontWeight.w700)),
+            Text(
+              element.name,
+              style: TextStyle(
+                fontSize: compact ? 12 : 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (unknown > 0)
+              Container(
+                margin: const EdgeInsets.only(left: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: const Color(0x24FFD34D),
+                  borderRadius: BorderRadius.circular(99),
+                  border: Border.all(color: const Color(0x4DFFD34D)),
+                ),
+                child: Text(
+                  '🔗$unknown',
+                  style: const TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFFFFD34D),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

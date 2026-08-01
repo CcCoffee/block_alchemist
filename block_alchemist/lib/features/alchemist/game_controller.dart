@@ -32,8 +32,8 @@ const List<WorldLevel> kWorldLevels = <WorldLevel>[
 
 class Block {
   Block(this.elementId, this.row, this.col, double time)
-      : createdAt = time,
-        id = _seq++;
+    : createdAt = time,
+      id = _seq++;
   static int _seq = 1;
 
   final int id;
@@ -74,9 +74,9 @@ class Particle {
     required this.vx,
     required this.vy,
     required this.color,
-  })  : life = 0.5 + Random().nextDouble() * 0.4,
-        max = 0.9,
-        size = 3 + Random().nextDouble() * 4;
+  }) : life = 0.5 + Random().nextDouble() * 0.4,
+       max = 0.9,
+       size = 3 + Random().nextDouble() * 4;
 
   double x, y, vx, vy, life;
   final double max;
@@ -109,16 +109,19 @@ class CellFlash {
 
 /// 拖拽会话（地图方块 / 材料栏）
 class DragState {
-  DragState.map({required Block block, required this.fromRow, required this.fromCol})
-      : kind = 'map',
-        block = block,
-        elementId = block.elementId;
+  DragState.map({
+    required Block block,
+    required this.fromRow,
+    required this.fromCol,
+  }) : kind = 'map',
+       block = block,
+       elementId = block.elementId;
 
   DragState.tray({required this.elementId})
-      : kind = 'tray',
-        block = null,
-        fromRow = -1,
-        fromCol = -1;
+    : kind = 'tray',
+      block = null,
+      fromRow = -1,
+      fromCol = -1;
 
   final String kind;
   final Block? block;
@@ -128,9 +131,7 @@ class DragState {
   Offset position = Offset.zero;
   bool active = false;
 
-  ElementDef? get def => kind == 'tray'
-      ? elementById[elementId!]
-      : block?.def;
+  ElementDef? get def => kind == 'tray' ? elementById[elementId!] : block?.def;
 }
 
 class RecordEntry {
@@ -146,13 +147,107 @@ class RecordEntry {
 
 class WorldBars {
   final double nature, tech, prosperity;
-  const WorldBars({required this.nature, required this.tech, required this.prosperity});
+  const WorldBars({
+    required this.nature,
+    required this.tech,
+    required this.prosperity,
+  });
+}
+
+/* ============================ 世界目标 ============================ */
+
+/// 目标：type（发现某类型元素）/ element（发现指定元素）/
+/// merge（合成次数）/ score（累计积分）
+class Goal {
+  const Goal({
+    required this.kind,
+    required this.target,
+    required this.reward,
+    this.typeName,
+    this.elementId,
+  });
+
+  final String kind;
+  final String? typeName;
+  final String? elementId;
+  final int target;
+  final int reward;
+
+  String get key => '$kind|${typeName ?? elementId ?? ''}|$target';
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'kind': kind,
+    'typeName': typeName,
+    'elementId': elementId,
+    'target': target,
+    'reward': reward,
+  };
+
+  static Goal fromJson(Map<String, dynamic> m) => Goal(
+    kind: m['kind'] as String? ?? 'merge',
+    typeName: m['typeName'] as String?,
+    elementId: m['elementId'] as String?,
+    target: (m['target'] as num?)?.toInt() ?? 5,
+    reward: (m['reward'] as num?)?.toInt() ?? 50,
+  );
+}
+
+const List<Goal> kGoalTemplates = <Goal>[
+  Goal(kind: 'type', typeName: '动物', target: 3, reward: 80),
+  Goal(kind: 'type', typeName: '植物', target: 4, reward: 80),
+  Goal(kind: 'type', typeName: '工具', target: 2, reward: 80),
+  Goal(kind: 'type', typeName: '建筑', target: 3, reward: 100),
+  Goal(kind: 'type', typeName: '科技', target: 2, reward: 120),
+  Goal(kind: 'type', typeName: '文明', target: 2, reward: 120),
+  Goal(kind: 'type', typeName: '食物', target: 4, reward: 80),
+  Goal(kind: 'type', typeName: '神话', target: 2, reward: 150),
+  Goal(kind: 'element', elementId: 'rainbow', target: 1, reward: 120),
+  Goal(kind: 'element', elementId: 'city', target: 1, reward: 150),
+  Goal(kind: 'element', elementId: 'electricity', target: 1, reward: 100),
+  Goal(kind: 'element', elementId: 'robot', target: 1, reward: 150),
+  Goal(kind: 'element', elementId: 'airplane', target: 1, reward: 120),
+  Goal(kind: 'element', elementId: 'library', target: 1, reward: 120),
+  Goal(kind: 'element', elementId: 'rocket', target: 1, reward: 180),
+  Goal(kind: 'element', elementId: 'dragon', target: 1, reward: 200),
+  Goal(kind: 'element', elementId: 'phoenix', target: 1, reward: 200),
+  Goal(kind: 'element', elementId: 'mermaid', target: 1, reward: 150),
+  Goal(kind: 'merge', target: 10, reward: 100),
+  Goal(kind: 'merge', target: 30, reward: 150),
+  Goal(kind: 'merge', target: 60, reward: 250),
+  Goal(kind: 'score', target: 500, reward: 100),
+  Goal(kind: 'score', target: 2000, reward: 200),
+  Goal(kind: 'score', target: 5000, reward: 400),
+];
+
+const Map<String, String> kGoalTypeIcons = <String, String>{
+  '动物': '🐾',
+  '植物': '🌱',
+  '工具': '🛠️',
+  '建筑': '🏗️',
+  '科技': '⚙️',
+  '文明': '🏛️',
+  '食物': '🍲',
+  '神话': '✨',
+};
+const Map<String, String> kGoalKindIcons = <String, String>{
+  'merge': '🔗',
+  'score': '💰',
+};
+
+List<T> _shuffle<T>(List<T> list, Random rnd) {
+  final out = list.toList();
+  for (var i = out.length - 1; i > 0; i--) {
+    final j = rnd.nextInt(i + 1);
+    final tmp = out[i];
+    out[i] = out[j];
+    out[j] = tmp;
+  }
+  return out;
 }
 
 /* ============================ 状态控制器 ============================ */
 
-final gameControllerProvider =
-    ChangeNotifierProvider<GameController>((ref) {
+final gameControllerProvider = ChangeNotifierProvider<GameController>((ref) {
   // ChangeNotifierProvider 会在 provider 销毁时自动 dispose notifier
   return GameController(GameStorage.instance);
 });
@@ -185,10 +280,20 @@ class GameController extends ChangeNotifier {
   double _toastUntil = 0;
   int _discoveryRev = 0;
   int _selectRev = 0;
+  int _goalRev = 0;
+  int mergeCount = 0; // 累计成功合成次数（目标进度）
+  int failStreak = 0; // 连续失败次数（卡住判定）
+  double lastDiscoveryAt = 0; // 上次新发现时间（游戏内时间）
+  double lastHintAt = -1e9; // 上次使用提示的时间
+  double _hintCheck = 0;
+  bool _lastHintReady = false;
+  Map<String, int>? _depthCache; // 配方深度缓存
+  List<Goal> goals = <Goal>[]; // 世界目标（3 个）
   double boardPixelSize = 0;
 
   int get discoveryRev => _discoveryRev;
   int get selectionRev => _selectRev;
+  int get goalRev => _goalRev;
   double get gameTime => _time;
   int get discoveredCount => discovered.length;
 
@@ -205,17 +310,28 @@ class GameController extends ChangeNotifier {
       try {
         final map = jsonDecode(raw) as Map<String, dynamic>;
         score = (map['score'] as num?)?.toInt() ?? 0;
+        mergeCount = (map['mergeCount'] as num?)?.toInt() ?? 0;
         discovered = <String>{
           ...kStarterIds,
-          ...?((map['discovered'] as List?)
-              ?.whereType<String>()
-              .where(elementById.containsKey)),
+          ...?((map['discovered'] as List?)?.whereType<String>().where(
+            elementById.containsKey,
+          )),
         };
         records = ((map['records'] as List?) ?? const <dynamic>[])
             .map((e) => RecordEntry.fromJson(e as Map<String, dynamic>))
             .where((r) => elementById.containsKey(r.id))
             .take(300)
             .toList();
+        final goalList = map['goals'] as List?;
+        goals = (goalList ?? const <dynamic>[])
+            .whereType<Map<String, dynamic>>()
+            .map(Goal.fromJson)
+            .where((g) => g.target > 0)
+            .take(3)
+            .toList();
+        if (goals.length != 3) {
+          goals = _makeGoals(discovered, const <String>[], 3);
+        }
         boardSize = ((map['size'] as num?)?.toInt() ?? 6).clamp(6, 8);
         _newGrid(boardSize);
         final gridData = map['grid'] as List?;
@@ -236,6 +352,7 @@ class GameController extends ChangeNotifier {
       }
     } else {
       _seed();
+      goals = _makeGoals(discovered, const <String>[], 3);
     }
     _updateWorld(notify: false);
     notifyListeners();
@@ -265,20 +382,28 @@ class GameController extends ChangeNotifier {
         flat.add(grid[r][c]?.elementId);
       }
     }
-    _storage.setSave(jsonEncode(<String, dynamic>{
-      'v': 1,
-      'score': score,
-      'discovered': discovered.toList(),
-      'records': records.map((e) => e.toJson()).toList(),
-      'grid': flat,
-      'size': boardSize,
-    }));
+    _storage.setSave(
+      jsonEncode(<String, dynamic>{
+        'v': 1,
+        'score': score,
+        'mergeCount': mergeCount,
+        'discovered': discovered.toList(),
+        'records': records.map((e) => e.toJson()).toList(),
+        'goals': goals.map((g) => g.toJson()).toList(),
+        'grid': flat,
+        'size': boardSize,
+      }),
+    );
   }
 
   void resetGame() {
     discovered = <String>{...kStarterIds};
     records = <RecordEntry>[];
     score = 0;
+    mergeCount = 0;
+    failStreak = 0;
+    lastDiscoveryAt = 0;
+    lastHintAt = -1e9;
     selected = null;
     drag = null;
     mergeAnims.clear();
@@ -286,6 +411,8 @@ class GameController extends ChangeNotifier {
     floatTexts.clear();
     cellFlashes.clear();
     _discoveryRev++;
+    goals = _makeGoals(discovered, const <String>[], 3);
+    _goalRev++;
     _seed();
     _updateWorld(notify: false);
     _storage.clearSave();
@@ -406,7 +533,172 @@ class GameController extends ChangeNotifier {
     records.insert(0, RecordEntry(id, DateTime.now().millisecondsSinceEpoch));
     if (records.length > 300) records.removeLast();
     _discoveryRev++;
+    lastDiscoveryAt = _time;
+    _checkGoals();
     return true;
+  }
+
+  /* ================= 世界目标 ================= */
+
+  int goalProgress(Goal g) {
+    if (g.kind == 'type') {
+      var n = 0;
+      for (final id in discovered) {
+        final e = elementById[id];
+        if (e != null && e.type == g.typeName) n++;
+      }
+      return n;
+    }
+    if (g.kind == 'element') return discovered.contains(g.elementId) ? 1 : 0;
+    if (g.kind == 'merge') return mergeCount;
+    if (g.kind == 'score') return score;
+    return 0;
+  }
+
+  String goalLabel(Goal g) {
+    switch (g.kind) {
+      case 'type':
+        return '发现 ${g.target} 种${g.typeName}';
+      case 'element':
+        final e = elementById[g.elementId!];
+        return e != null ? '发现 ${e.emoji} ${e.name}' : '发现 ${g.elementId}';
+      case 'merge':
+        return '完成 ${g.target} 次合成';
+      case 'score':
+        return '累计获得 ${g.target} 炼金点';
+      default:
+        return '';
+    }
+  }
+
+  String goalIcon(Goal g) {
+    if (g.kind == 'type') return kGoalTypeIcons[g.typeName] ?? '🧩';
+    if (g.kind == 'element') return elementById[g.elementId]?.emoji ?? '🎯';
+    return kGoalKindIcons[g.kind] ?? '🎯';
+  }
+
+  /// 检查目标进度；完成后发奖励并立即换一个新目标（一次只完成一个）
+  void _checkGoals() {
+    if (goals.isEmpty) return;
+    for (var i = 0; i < goals.length; i++) {
+      final g = goals[i];
+      if (goalProgress(g) < g.target) continue;
+      score += g.reward;
+      SoundService.discover();
+      showToast('🎯 目标完成：${goalLabel(g)} +${g.reward} 炼金点');
+      final exclude = goals.map((x) => x.key).toList();
+      goals[i] = _makeGoals(discovered, exclude, 1).first;
+      _goalRev++;
+      save();
+      break;
+    }
+  }
+
+  List<Goal> _makeGoals(Set<String> known, List<String> exclude, int count) {
+    final pool = _shuffle(kGoalTemplates, _rnd)
+        .where((t) => _goalFeasible(t, known) && !exclude.contains(t.key))
+        .toList();
+    final out = <Goal>[];
+    for (final t in pool) {
+      out.add(t);
+      if (out.length >= count) break;
+    }
+    // 兜底：模板不足时生成合成目标，保证永远有 3 个目标
+    var i = 0;
+    while (out.length < count) {
+      out.add(Goal(kind: 'merge', target: 5 + i * 3, reward: 50 + i * 20));
+      i++;
+    }
+    return out;
+  }
+
+  bool _goalFeasible(Goal t, Set<String> known) {
+    if (t.kind == 'element') return !known.contains(t.elementId);
+    if (t.kind == 'type') {
+      var n = 0;
+      for (final e in kElements) {
+        if (e.type == t.typeName && !known.contains(e.id)) n++;
+      }
+      return n >= t.target;
+    }
+    return true; // merge / score 永远可行
+  }
+
+  /* ================= 潜力 / 卡住提示 ================= */
+
+  /// 该元素还能参与合成多少种未发现元素（材料栏 🔗N 徽标）
+  int unknownChildren(String id) => kElements
+      .where(
+        (e) =>
+            !discovered.contains(e.id) &&
+            e.recipes.any((r) => r[0] == id || r[1] == id),
+      )
+      .length;
+
+  /// 连续失败 >=3 次，或 90 秒没有新发现；且 45 秒冷却已过
+  bool get hintReady {
+    final stuck = failStreak >= 3 || (_time - lastDiscoveryAt) > 90;
+    final cooldown = (_time - lastHintAt) > 45;
+    return stuck && cooldown;
+  }
+
+  /// 点击提示：返回一条“材料都已发现”的线索 [a, b]；未就绪返回 null
+  (String, String)? useHint() {
+    if (!hintReady) return null;
+    _depthCache ??= _computeDepth();
+    final pair = _pickHintPair(discovered, _depthCache!);
+    if (pair == null) {
+      showToast('暂时没有可提示的配方，继续探索吧');
+      return null;
+    }
+    final a = elementById[pair.$1]!;
+    final b = elementById[pair.$2]!;
+    showToast('💡 线索：${a.emoji} ${a.name} 与 ${b.emoji} ${b.name} 之间似乎藏着秘密…');
+    failStreak = 0;
+    lastHintAt = _time;
+    SoundService.place();
+    return pair;
+  }
+
+  /// 每个元素从初始元素出发的最小配方深度（有环也收敛）
+  Map<String, int> _computeDepth() {
+    final depth = <String, int>{for (final id in kStarterIds) id: 0};
+    var changed = true;
+    while (changed) {
+      changed = false;
+      for (final e in kElements) {
+        if (depth.containsKey(e.id)) continue;
+        var best = 1 << 30;
+        for (final r in e.recipes) {
+          final da = depth[r[0]];
+          final db = depth[r[1]];
+          if (da != null && db != null) best = min(best, max(da, db) + 1);
+        }
+        if (best < (depth[e.id] ?? 1 << 30)) {
+          depth[e.id] = best;
+          changed = true;
+        }
+      }
+    }
+    return depth;
+  }
+
+  (String, String)? _pickHintPair(Set<String> known, Map<String, int> depth) {
+    final candidates = <(String, String)>[];
+    final shallow = <(String, String)>[];
+    for (final e in kElements) {
+      if (known.contains(e.id) || e.type == '灾害') continue;
+      for (final r in e.recipes) {
+        if (known.contains(r[0]) && known.contains(r[1])) {
+          candidates.add((r[0], r[1]));
+          if ((depth[e.id] ?? 99) <= 4) shallow.add((r[0], r[1]));
+          break; // 每个元素只给一条候选
+        }
+      }
+    }
+    final pool = shallow.isNotEmpty ? shallow : candidates;
+    if (pool.isEmpty) return null;
+    return pool[_rnd.nextInt(pool.length)];
   }
 
   /* ================= 操作 ================= */
@@ -444,19 +736,26 @@ class GameController extends ChangeNotifier {
     grid[b.row][b.col] = null;
     a.removed = true;
     b.removed = true;
-    mergeAnims.add(MergeAnim(
-      r1: a.row,
-      c1: a.col,
-      r2: b.row,
-      c2: b.col,
-      rid: rid,
-      row: b.row,
-      col: b.col,
-    ));
+    mergeAnims.add(
+      MergeAnim(
+        r1: a.row,
+        c1: a.col,
+        r2: b.row,
+        c2: b.col,
+        rid: rid,
+        row: b.row,
+        col: b.col,
+      ),
+    );
     final def = elementById[rid]!;
     final mid = Offset((c1.dx + c2.dx) / 2, (c1.dy + c2.dy) / 2);
     burst(mid.dx, mid.dy, kRarityColors[def.rarity], 22, 0.1786);
-    floatText(mid.dx, mid.dy - 0.06, '+${def.value}', kRarityColors[def.rarity]);
+    floatText(
+      mid.dx,
+      mid.dy - 0.06,
+      '+${def.value}',
+      kRarityColors[def.rarity],
+    );
     SoundService.merge();
     if (selected == a || selected == b) clearSelection();
     notifyListeners();
@@ -468,12 +767,20 @@ class GameController extends ChangeNotifier {
     final def = elementById[anim.rid]!;
     final isNew = discover(anim.rid);
     score += def.value;
+    mergeCount++;
+    failStreak = 0;
     if (isNew) {
       SoundService.discover();
       final c = centerNorm(anim.row, anim.col);
       burst(c.dx, c.dy, kRarityColors[def.rarity], 30, 0.232);
-      showToast('✨ 新发现：${def.emoji} ${def.name}！');
+      final unknown = unknownChildren(anim.rid);
+      showToast(
+        unknown > 0
+            ? '✨ 新发现：${def.emoji} ${def.name}！它还能合成 $unknown 种未知元素'
+            : '✨ 新发现：${def.emoji} ${def.name}！',
+      );
     }
+    _checkGoals();
     _updateWorld();
     save();
     notifyListeners();
@@ -486,6 +793,7 @@ class GameController extends ChangeNotifier {
     showToast('${ea.emoji} ${ea.name} + ${eb.emoji} ${eb.name} 无法合成');
     flashCell(a.row, a.col, const Color(0x8CFF5A5A));
     flashCell(b.row, b.col, const Color(0x8CFF5A5A));
+    failStreak++;
     notifyListeners();
   }
 
@@ -704,6 +1012,16 @@ class GameController extends ChangeNotifier {
       changed = true;
     }
 
+    // 每秒检查一次提示按钮是否变为可用（长时间无发现时）
+    _hintCheck += dt;
+    if (_hintCheck >= 1) {
+      _hintCheck = 0;
+      if (_lastHintReady != hintReady) {
+        _lastHintReady = hintReady;
+        changed = true;
+      }
+    }
+
     if (updateEvents(dt)) changed = true;
     if (updateDisasters()) changed = true;
     if (changed) notifyListeners();
@@ -712,17 +1030,25 @@ class GameController extends ChangeNotifier {
   /* ================= 特效 ================= */
 
   // 默认速度与网页版一致（110px/s ÷ 560px 画布 ≈ 0.196）
-  void burst(double nx, double ny, Color color, int count, [double speed = 0.196]) {
+  void burst(
+    double nx,
+    double ny,
+    Color color,
+    int count, [
+    double speed = 0.196,
+  ]) {
     for (var i = 0; i < count; i++) {
       final angle = _rnd.nextDouble() * pi * 2;
       final v = speed * (0.35 + _rnd.nextDouble() * 0.75);
-      particles.add(Particle(
-        x: nx,
-        y: ny,
-        vx: cos(angle) * v,
-        vy: sin(angle) * v,
-        color: color,
-      ));
+      particles.add(
+        Particle(
+          x: nx,
+          y: ny,
+          vx: cos(angle) * v,
+          vy: sin(angle) * v,
+          color: color,
+        ),
+      );
     }
   }
 

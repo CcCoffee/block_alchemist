@@ -27,8 +27,10 @@ class _HelpSheet extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
             child: Row(
               children: [
-                const Text('🧪 玩法说明',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                const Text(
+                  '🧪 玩法说明',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                ),
                 const Spacer(),
                 IconButton(
                   icon: const Icon(Icons.close),
@@ -63,16 +65,28 @@ class _HelpSheet extends StatelessWidget {
                   ],
                 ),
                 _Section(
+                  title: '🎯 世界目标',
+                  items: [
+                    '顶部会同时展示 3 个目标：发现某元素、凑齐某类图鉴、完成合成次数等',
+                    '完成目标会奖励炼金点，并立即刷新一个新目标',
+                    '材料栏方块上的 🔗N 表示它还能参与合成 N 种未知元素',
+                  ],
+                ),
+                _Section(
+                  title: '💡 卡住提示',
+                  items: [
+                    '连续失败几次，或 90 秒没有新发现时，底部 💡 提示按钮会亮起',
+                    '点击提示会得到一条线索：两个已发现的元素之间藏着秘密配方',
+                  ],
+                ),
+                _Section(
                   title: '⚠️ 灾害事件',
                   items: [
                     '探索到一定程度后，干旱、洪水、地震等灾害会随机降临',
                     '灾害会拉低繁荣并占据空间，可以删除或等待自动消退',
                   ],
                 ),
-                _Section(
-                  title: '💾 存档',
-                  items: ['图鉴、记录、地图和分数自动保存在本地，无需网络'],
-                ),
+                _Section(title: '💾 存档', items: ['图鉴、记录、地图和分数自动保存在本地，无需网络']),
               ],
             ),
           ),
@@ -94,11 +108,14 @@ class _Section extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title,
-              style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF6EA8FF))),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF6EA8FF),
+            ),
+          ),
           const SizedBox(height: 6),
           for (final item in items)
             Padding(
