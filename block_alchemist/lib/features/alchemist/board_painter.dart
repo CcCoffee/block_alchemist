@@ -128,6 +128,12 @@ class BoardPainter extends CustomPainter {
     if (age < 0.24) {
       scale = 0.4 + 0.6 * _easeOutBack(age / 0.24);
     }
+    var alpha = 1.0;
+    if (b.collectAt != null) {
+      final p = (game.gameTime - b.collectAt!) / 0.55;
+      if (p >= 1) return; // 已到收走时间，由控制器移除
+      alpha = 1 - p;
+    }
     final s = cell - 6;
     final x = b.col * cell + 3;
     final y = b.row * cell + 3;
@@ -135,7 +141,7 @@ class BoardPainter extends CustomPainter {
     canvas.translate(x + s / 2, y + s / 2);
     canvas.scale(scale, scale);
     canvas.translate(-(x + s / 2), -(y + s / 2));
-    _drawTile(canvas, Offset(x, y), s, b.def, 1);
+    _drawTile(canvas, Offset(x, y), s, b.def, alpha);
 
     // 灾害方块：脉动红圈
     if (b.def.type == '灾害') {

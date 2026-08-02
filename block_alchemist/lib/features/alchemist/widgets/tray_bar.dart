@@ -5,6 +5,12 @@ import '../data/elements.dart';
 import '../game_controller.dart';
 import '../sound_service.dart';
 
+/// 最终物品 id 集合：无法再参与任何合成（与 Little Alchemy 2 的 Final Items 同义）
+final Set<String> _kFinalElementIds = kElements
+    .where((e) => childrenOf(e.id).isEmpty)
+    .map((e) => e.id)
+    .toSet();
+
 /// 材料栏：已发现的元素，可拖出到地图 / 轻点自动放置
 class TrayBar extends ConsumerStatefulWidget {
   const TrayBar({super.key, required this.toBoardLocal});
@@ -36,9 +42,20 @@ class _TrayBarState extends ConsumerState<TrayBar> {
     final q = _search.text.trim().toLowerCase();
     final list = kElements
         .where((e) => game.discovered.contains(e.id))
+        .where((e) => !_kFinalElementIds.contains(e.id))
         .where((e) => _type == 'all' || e.type == _type)
         .where((e) => q.isEmpty || e.name.toLowerCase().contains(q))
         .toList();
+    final trayCounts = <String, int>{};
+    var trayTotal = 0;
+    for (final e in kElements) {
+      if (!game.discovered.contains(e.id) ||
+          _kFinalElementIds.contains(e.id)) {
+        continue;
+      }
+      trayCounts[e.type] = (trayCounts[e.type] ?? 0) + 1;
+      trayTotal++;
+    }
 
     return Container(
       padding: const EdgeInsets.all(10),
@@ -68,18 +85,45 @@ class _TrayBarState extends ConsumerState<TrayBar> {
                 ),
               ),
               const SizedBox(width: 8),
-              SizedBox(
-                width: 110,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _type,
-                  isDense: true,
-                  decoration: const InputDecoration(isDense: true),
-                  items: [
-                    const DropdownMenuItem(value: 'all', child: Text('全部类型')),
-                    for (final t in kTypeList)
-                      DropdownMenuItem(value: t, child: Text(t)),
-                  ],
-                  onChanged: (v) => setState(() => _type = v ?? 'all'),
+              // 宽度跟随文字自适应，避免固定宽度与内容不匹配
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0x14FFFFFF),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0x1FFFFFFF)),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _type,
+                    isDense: true,
+                    borderRadius: BorderRadius.circular(10),
+                    dropdownColor: const Color(0xFF1B2340),
+                    icon: const Icon(
+                      Icons.keyboard_arrow_down,
+                      size: 18,
+                      color: Color(0xFF8A93B5),
+                    ),
+                    style:
+                        const TextStyle(fontSize: 12, color: Color(0xFFE8ECF8)),
+                    // 收起状态只显示短标签，完整数量在展开菜单里
+                    selectedItemBuilder: (context) => [
+                      const Text('全部类型'),
+                      for (final t in kTypeList) Text(t),
+                    ],
+                    items: [
+                      DropdownMenuItem(
+                        value: 'all',
+                        child: Text('全部类型 · $trayTotal'),
+                      ),
+                      for (final t in kTypeList)
+                        DropdownMenuItem(
+                          value: t,
+                          child: Text('$t · ${trayCounts[t] ?? 0}'),
+                        ),
+                    ],
+                    onChanged: (v) => setState(() => _type = v ?? 'all'),
+                  ),
                 ),
               ),
               IconButton(

@@ -449,6 +449,7 @@ class Block {
     this.createdAt = performance.now();
     this.removed = false;
     this.expiresAt = 0; // 灾害方块使用
+    this.collectAt = 0; // 最终物品自动收走的淡出开始时间戳（0 = 不收起）
   }
 }
 
@@ -629,6 +630,7 @@ class Game {
     this.depthMap = null;         // 配方深度缓存
     this.goals = [];              // 世界目标（3 个）
     this.savedDisasters = 0;      // 累计救灾成功次数
+    this.finalReminderShown = false; // 是否已友好提醒过最终物品自动收走
 
     /* ----- 存档或新开局 ----- */
     const save = this.saveMgr.load();
@@ -663,6 +665,7 @@ class Game {
       ? d.goals.filter((g) => g && typeof g.kind === 'string' && g.target > 0)
       : [];
     this.savedDisasters = Math.max(0, parseInt(d.savedDisasters, 10) || 0);
+    this.finalReminderShown = d.finalReminderShown === true;
     const size = clampNum(parseInt(d.size, 10) || 6, 6, 8);
     this.board = new Board(size);
     if (Array.isArray(d.grid)) {
@@ -700,6 +703,7 @@ class Game {
       records: this.encyclopedia.toData().records,
       goals: this.goals,
       savedDisasters: this.savedDisasters,
+      finalReminderShown: this.finalReminderShown,
       grid,
       size,
     });
@@ -946,13 +950,43 @@ class Game {
   }
 
   buildTrayOptions() {
-    const sel = this.trayType;
-    sel.innerHTML = `<option value="all">全部类型</option>` +
+    this.trayType.innerHTML = `<option value="all">全部类型</option>` +
       TYPE_LIST.map((t) => `<option value="${t}">${t}</option>`).join('');
-    sel.value = 'all';
+    this.trayType.value = 'all';
     const codexSel = document.getElementById('codex-type');
-    codexSel.innerHTML = sel.innerHTML;
+    codexSel.innerHTML = `<option value="all">全部类型</option>` +
+      TYPE_LIST.map((t) => `<option value="${t}">${t}</option>`).join('');
     codexSel.value = 'all';
+    this.updateTypeOptionCounts();
+  }
+
+  /** 刷新类型下拉框里的数量：材料栏显示“可用的已发现数”，图鉴显示“已发现/总数” */
+  updateTypeOptionCounts() {
+    const trayCounts = {};
+    let trayTotal = 0;
+    for (const e of ELEMENTS) {
+      if (!this.encyclopedia.has(e.id) || isFinalElement(e.id)) continue;
+      trayCounts[e.type] = (trayCounts[e.type] || 0) + 1;
+      trayTotal++;
+    }
+    for (const opt of this.trayType.options) {
+      opt.textContent = opt.value === 'all'
+        ? `全部类型 · ${trayTotal}`
+        : `${opt.value} · ${trayCounts[opt.value] || 0}`;
+    }
+    const codexCounts = {};
+    for (const e of ELEMENTS) {
+      if (!codexCounts[e.type]) codexCounts[e.type] = { d: 0, t: 0 };
+      codexCounts[e.type].t++;
+      if (this.encyclopedia.has(e.id)) codexCounts[e.type].d++;
+    }
+    const codexSel = document.getElementById('codex-type');
+    for (const opt of codexSel.options) {
+      const c = opt.value === 'all'
+        ? { d: this.encyclopedia.count(), t: ELEMENTS.length }
+        : (codexCounts[opt.value] || { d: 0, t: 0 });
+      opt.textContent = `${opt.value === 'all' ? '全部类型' : opt.value} · ${c.d}/${c.t}`;
+    }
   }
 
   /* ================= 地图拖拽 ================= */
@@ -1046,8 +1080,10 @@ class Game {
     const list = ELEMENTS.filter((e) =>
       this.encyclopedia.has(e.id) &&
       (tf === 'all' || e.type === tf) &&
+      !isFinalElement(e.id) &&
       (!q || e.name.toLowerCase().includes(q))
     );
+    this.updateTypeOptionCounts();
     if (!list.length) {
       this.trayEl.innerHTML = '<div class="tray-empty">没有符合条件的元素</div>';
       return;
@@ -1158,9 +1194,18 @@ class Game {
       this.audio.play('achievement');
       const unknown = getChildren(anim.rid)
         .filter((c) => !this.encyclopedia.has(c.id)).length;
-      this.showToast(unknown > 0
-        ? `✨ 新发现：${el.emoji} ${el.name}！它还能合成 ${unknown} 种未知元素`
-        : `✨ 新发现：${el.emoji} ${el.name}！`);
+      let msg = `✨ 新发现：${el.emoji} ${el.name}！`;
+      if (isFinalElement(anim.rid) && el.type !== '灾害') {
+        if (!this.finalReminderShown) {
+          this.finalReminderShown = true;
+          msg = `✨ 新发现：${el.emoji} ${el.name}！🏁 它是最终物品，无法再参与合成，已自动收进图鉴，不再占用地图和材料栏`;
+        } else {
+          msg += '🏁 已自动收进图鉴';
+        }
+      } else if (unknown > 0) {
+        msg += `它还能合成 ${unknown} 种未知元素`;
+      }
+      this.showToast(msg);
       const c = this.cellCenter(anim.row, anim.col);
       this.particles.burst(c.x, c.y, RARITY_INFO[el.rarity].color, 30, 130);
     }
@@ -1269,7 +1314,9 @@ class Game {
     document.getElementById('sel-children').innerHTML = known.length
       ? known.map((c) => `<span class="sel-chip">${c.emoji} ${c.name}</span>`).join('') +
         (unknown ? `<span class="sel-chip locked">❓ 还有 ${unknown} 种未发现</span>` : '')
-      : (children.length ? `<span class="sel-chip locked">❓ 有 ${children.length} 种配方尚未探索</span>` : '<span class="sel-chip">暂无已知配方</span>');
+      : (children.length
+          ? `<span class="sel-chip locked">❓ 有 ${children.length} 种配方尚未探索</span>`
+          : '<span class="sel-chip locked">🏁 最终物品，无法再参与合成</span>');
 
     // 灾害方块：展示救世配方，并禁止直接删除（救灾或等待消退）
     const isDisaster = e.type === '灾害';
@@ -1367,6 +1414,7 @@ class Game {
   /* ================= 图鉴 ================= */
 
   openCodex(tab) {
+    this.updateTypeOptionCounts();
     this.renderCodex();
     this.renderRecords();
     this.switchCodexTab(tab);
@@ -1393,10 +1441,13 @@ class Game {
     grid.innerHTML = list.map((e) => {
       const has = this.encyclopedia.has(e.id);
       const r = RARITY_INFO[e.rarity];
+      const meta = isFinalElement(e.id)
+        ? '<span class="cx-final">🏁 最终</span>'
+        : `<span class="cx-rarity" style="color:${r.color}">${r.key}</span>`;
       return has
         ? `<div class="codex-card" data-id="${e.id}">` +
           `<span class="cx-emoji">${e.emoji}</span><span class="cx-name">${e.name}</span>` +
-          `<span class="cx-rarity" style="color:${r.color}">${r.key}</span></div>`
+          meta + `</div>`
         : `<div class="codex-card locked" data-id="${e.id}">` +
           `<span class="cx-emoji">❓</span><span class="cx-name">???</span>` +
           `<span class="cx-rarity">未发现</span></div>`;
@@ -1417,16 +1468,17 @@ class Game {
       this.encyclopedia.has(p.id) ? `${p.emoji} ${p.name}` : '❓ ???';
     const parents = recipes.map(([pa, pb]) => `${name(pa)} + ${name(pb)}`)
         .join(' 或 ') || '初始元素';
-    const children = getChildren(e.id)
+    const childrenText = getChildren(e.id)
       .filter((c) => this.encyclopedia.has(c.id))
-      .map((c) => `${c.emoji} ${c.name}`).join('、') || '暂无';
+      .map((c) => `${c.emoji} ${c.name}`).join('、') ||
+      (isFinalElement(e.id) ? '🏁 最终物品，无法再参与合成' : '暂无');
     const detail = document.getElementById('codex-detail');
     detail.innerHTML =
       `<b style="font-size:17px">${e.emoji} ${e.name}</b> ` +
       `<span style="color:${r.color};font-size:12px;font-weight:700">${r.key} · ${e.type}</span>` +
       `<div style="font-size:12px;color:var(--muted)">${escapeHtml(e.desc)}</div>` +
       `<div style="font-size:13px;margin-top:6px">📜 合成：${parents} → ${e.emoji}</div>` +
-      `<div style="font-size:13px">🔬 能合成：${children}</div>`;
+      `<div style="font-size:13px">🔬 能合成：${childrenText}</div>`;
     detail.classList.remove('hidden');
   }
 
@@ -1472,7 +1524,7 @@ class Game {
     void this.toastEl.offsetWidth;
     this.toastEl.classList.add('show');
     clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => this.toastEl.classList.remove('show'), 2600);
+    this.toastTimer = setTimeout(() => this.toastEl.classList.remove('show'), 4000);
   }
 
   toggleMute() {
@@ -1523,6 +1575,23 @@ class Game {
     this.updateAnims(dt);
     this.updateEvents(dt);
     this.updateDisasters();
+    // 最终物品自动收走（像 Little Alchemy 2 一样，灾害方块除外）
+    for (const b of this.board.allBlocks()) {
+      const e = ELEMENTS_BY_ID[b.elementId];
+      if (!e || !isFinalElement(b.elementId) || e.type === '灾害') continue;
+      if (!b.collectAt) {
+        b.collectAt = performance.now() + 350; // 先展示片刻再淡出
+        if (!this.finalReminderShown) {
+          this.finalReminderShown = true;
+          this.showToast('🏁 最终物品无法再参与合成，已自动收进图鉴（可在 📖 图鉴中查看，不再占用地图）');
+          this.autoSave();
+        }
+      } else if (performance.now() >= b.collectAt + 550) {
+        this.board.remove(b.row, b.col);
+        this.updateWorld();
+        this.autoSave();
+      }
+    }
     // 每秒检查一次提示按钮是否变为可用（长时间无发现时）
     this.hintCheckTimer += dt;
     if (this.hintCheckTimer >= 1) {
@@ -1653,6 +1722,12 @@ class Game {
       const p = age / 0.24;
       scale = 0.4 + 0.6 * easeOutBack(p);
     }
+    let alpha = 1;
+    if (b.collectAt) {
+      const p = (performance.now() - b.collectAt) / 550;
+      if (p >= 1) return; // 已到收走时间，由 update 移除
+      alpha = 1 - p;
+    }
     const s = cell - 6;
     const x = b.col * cell + 3;
     const y = b.row * cell + 3;
@@ -1661,7 +1736,7 @@ class Game {
     ctx.translate(x + s / 2, y + s / 2);
     ctx.scale(scale, scale);
     ctx.translate(-(x + s / 2), -(y + s / 2));
-    this.drawTile(x, y, s, e, 1);
+    this.drawTile(x, y, s, e, alpha);
     // 灾害方块：脉动红圈
     if (e.type === '灾害') {
       const pulse = 0.45 + 0.3 * Math.sin(performance.now() / 280);

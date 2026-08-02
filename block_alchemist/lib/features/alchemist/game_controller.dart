@@ -43,6 +43,7 @@ class Block {
   final double createdAt;
   bool removed = false;
   double? expiresAt; // 灾害方块存活到的现实时间（毫秒时间戳）
+  double? collectAt; // 最终物品自动收走的淡出开始时间（0 = 不收起）
 
   ElementDef get def => elementById[elementId]!;
 }
@@ -340,6 +341,7 @@ class GameController extends ChangeNotifier {
   Map<String, int>? _depthCache; // 配方深度缓存
   List<Goal> goals = <Goal>[]; // 世界目标（3 个）
   int savedDisasters = 0; // 累计救灾成功次数
+  bool finalReminderShown = false; // 是否已友好提醒过最终物品自动收走
   double boardPixelSize = 0;
 
   int get discoveryRev => _discoveryRev;
@@ -390,6 +392,7 @@ class GameController extends ChangeNotifier {
             .take(3)
             .toList();
         savedDisasters = (map['savedDisasters'] as num?)?.toInt() ?? 0;
+        finalReminderShown = map['finalReminderShown'] as bool? ?? false;
         boardSize = ((map['size'] as num?)?.toInt() ?? 6).clamp(6, 8);
         _newGrid(boardSize);
         final gridData = map['grid'] as List?;
@@ -451,11 +454,15 @@ class GameController extends ChangeNotifier {
         'records': records.map((e) => e.toJson()).toList(),
         'goals': goals.map((g) => g.toJson()).toList(),
         'savedDisasters': savedDisasters,
+        'finalReminderShown': finalReminderShown,
         'grid': flat,
         'size': boardSize,
       }),
     );
   }
+
+  /// 最终物品：无法再参与任何合成（与 Little Alchemy 2 的 Final Items 同义）
+  bool isFinalElement(String id) => childrenOf(id).isEmpty;
 
   void resetGame() {
     discovered = <String>{...kStarterIds};
@@ -898,11 +905,18 @@ class GameController extends ChangeNotifier {
       final c = centerNorm(anim.row, anim.col);
       burst(c.dx, c.dy, kRarityColors[def.rarity], 30, 0.232);
       final unknown = unknownChildren(anim.rid);
-      showToast(
-        unknown > 0
-            ? '✨ 新发现：${def.emoji} ${def.name}！它还能合成 $unknown 种未知元素'
-            : '✨ 新发现：${def.emoji} ${def.name}！',
-      );
+      var msg = '✨ 新发现：${def.emoji} ${def.name}！';
+      if (isFinalElement(anim.rid) && def.type != '灾害') {
+        if (!finalReminderShown) {
+          finalReminderShown = true;
+          msg = '✨ 新发现：${def.emoji} ${def.name}！🏁 它是最终物品，无法再参与合成，已自动收进图鉴，不再占用地图和材料栏';
+        } else {
+          msg += '🏁 已自动收进图鉴';
+        }
+      } else if (unknown > 0) {
+        msg += '它还能合成 $unknown 种未知元素';
+      }
+      showToast(msg);
     }
     _checkGoals();
     _updateWorld();
@@ -1162,6 +1176,29 @@ class GameController extends ChangeNotifier {
       }
     }
 
+    // 最终物品自动收走（像 Little Alchemy 2 一样，灾害方块除外）
+    var finalCollected = false;
+    for (final b in allBlocks()) {
+      if (!isFinalElement(b.elementId) || b.def.type == '灾害') continue;
+      if (b.collectAt == null) {
+        b.collectAt = _time + 0.35; // 先展示片刻再淡出
+        if (!finalReminderShown) {
+          finalReminderShown = true;
+          showToast('🏁 最终物品无法再参与合成，已自动收进图鉴（可在图鉴中查看，不再占用地图）');
+          save();
+        }
+      } else if (_time >= b.collectAt! + 0.55) {
+        grid[b.row][b.col] = null;
+        b.removed = true;
+        finalCollected = true;
+      }
+    }
+    if (finalCollected) {
+      _updateWorld();
+      save();
+      changed = true;
+    }
+
     if (updateEvents()) changed = true;
     if (updateDisasters()) changed = true;
     if (changed) notifyListeners();
@@ -1202,7 +1239,7 @@ class GameController extends ChangeNotifier {
 
   void showToast(String msg) {
     toast = msg;
-    _toastUntilMs = _wallMs + 2600;
+    _toastUntilMs = _wallMs + 4000;
     notifyListeners();
   }
 

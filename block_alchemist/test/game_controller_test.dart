@@ -247,6 +247,40 @@ void main() {
     expect(c2.allBlocks(), isNotEmpty);
   });
 
+  test('最终物品：无法再参与合成，自动从地图收走并首次友好提醒一次', () {
+    final c = GameController(GameStorage.instance);
+    // 尘埃是最终物品（无任何配方作为输入），火不是
+    expect(c.isFinalElement('dust'), isTrue);
+    expect(c.isFinalElement('fire'), isFalse);
+    expect(c.finalReminderShown, isFalse);
+
+    final cell = c.randomEmptyCell()!;
+    c.grid[cell.$1][cell.$2] = Block('dust', cell.$1, cell.$2, c.gameTime);
+    c.tick(0.4);
+    expect(c.finalReminderShown, isTrue, reason: '首次出现应友好提醒');
+    expect(c.toast, contains('最终物品'));
+    expect(
+      c.allBlocks().any((b) => b.elementId == 'dust'),
+      isTrue,
+      reason: '先展示片刻再收走',
+    );
+    c.tick(0.4);
+    expect(
+      c.allBlocks().any((b) => b.elementId == 'dust'),
+      isTrue,
+      reason: '展示与淡出期间仍在场上',
+    );
+    c.tick(0.6);
+    expect(
+      c.allBlocks().any((b) => b.elementId == 'dust'),
+      isFalse,
+      reason: '到时自动从地图收走',
+    );
+
+    final c2 = GameController(GameStorage.instance);
+    expect(c2.finalReminderShown, isTrue, reason: '提醒状态应随存档恢复，避免重复打扰');
+  });
+
   test('重置存档：只保留初始元素', () {
     final c = GameController(GameStorage.instance);
     c.resetGame();
@@ -327,10 +361,10 @@ void main() {
     nowMs += 46000;
     expect(c.hintReady, isTrue, reason: '45 秒冷却按现实时间结束');
 
-    // 弹窗按现实时间自动消失
+    // 弹窗按现实时间自动消失（展示 4 秒）
     c.showToast('测试弹窗');
     expect(c.toast, isNotNull);
-    nowMs += 3000;
+    nowMs += 4200;
     c.tick(0.1);
     expect(c.toast, isNull);
   });

@@ -43,6 +43,14 @@ class _CodexSheetState extends ConsumerState<CodexSheet> {
     ref.watch(gameControllerProvider.select((c) => c.discoveryRev));
     final game = ref.read(gameControllerProvider);
     final height = MediaQuery.sizeOf(context).height * 0.88;
+    final dCounts = <String, int>{};
+    final tCounts = <String, int>{};
+    for (final e in kElements) {
+      tCounts[e.type] = (tCounts[e.type] ?? 0) + 1;
+      if (game.discovered.contains(e.id)) {
+        dCounts[e.type] = (dCounts[e.type] ?? 0) + 1;
+      }
+    }
 
     return SizedBox(
       height: height,
@@ -90,18 +98,52 @@ class _CodexSheetState extends ConsumerState<CodexSheet> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  SizedBox(
-                    width: 110,
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _type,
-                      isDense: true,
-                      decoration: const InputDecoration(isDense: true),
-                      items: [
-                        const DropdownMenuItem(value: 'all', child: Text('全部类型')),
-                        for (final t in kTypeList)
-                          DropdownMenuItem(value: t, child: Text(t)),
-                      ],
-                      onChanged: (v) => setState(() => _type = v ?? 'all'),
+                  // 宽度跟随文字自适应，避免固定宽度与内容不匹配
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0x14FFFFFF),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0x1FFFFFFF)),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _type,
+                        isDense: true,
+                        borderRadius: BorderRadius.circular(10),
+                        dropdownColor: const Color(0xFF1B2340),
+                        icon: const Icon(
+                          Icons.keyboard_arrow_down,
+                          size: 18,
+                          color: Color(0xFF8A93B5),
+                        ),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFFE8ECF8),
+                        ),
+                        // 收起状态只显示短标签，完整数量在展开菜单里
+                        selectedItemBuilder: (context) => [
+                          const Text('全部类型'),
+                          for (final t in kTypeList) Text(t),
+                        ],
+                        items: [
+                          DropdownMenuItem(
+                            value: 'all',
+                            child: Text(
+                              '全部类型 · ${game.discoveredCount}/${kElements.length}',
+                            ),
+                          ),
+                          for (final t in kTypeList)
+                            DropdownMenuItem(
+                              value: t,
+                              child: Text(
+                                '$t · ${dCounts[t] ?? 0}/${tCounts[t] ?? 0}',
+                              ),
+                            ),
+                        ],
+                        onChanged: (v) => setState(() => _type = v ?? 'all'),
+                      ),
                     ),
                   ),
                 ],
@@ -269,7 +311,11 @@ class _CodexCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
             Text(
-              discovered ? kRarityNames[element.rarity] : '未发现',
+              discovered
+                  ? (childrenOf(element.id).isEmpty
+                      ? '🏁 最终'
+                      : kRarityNames[element.rarity])
+                  : '未发现',
               style: TextStyle(
                 fontSize: 9,
                 color: discovered ? color : const Color(0xFF8A93B5),
@@ -289,7 +335,8 @@ class _CodexDetailCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final children = childrenOf(element.id)
+    final allChildren = childrenOf(element.id);
+    final children = allChildren
         .where((c) => game.discovered.contains(c.id))
         .toList();
     final recipePairs = recipePairsOf(element.id);
@@ -302,7 +349,7 @@ class _CodexDetailCard extends StatelessWidget {
             .map((pair) => pair.map(name).join(' + '))
             .join(' 或 ');
     final childrenText = children.isEmpty
-        ? '暂无'
+        ? (allChildren.isEmpty ? '🏁 最终物品，无法再参与合成' : '暂无')
         : children.map((c) => '${c.emoji} ${c.name}').join('、');
 
     return Container(

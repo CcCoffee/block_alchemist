@@ -684,6 +684,11 @@ function getChildren(id) {
   );
 }
 
+/** 最终物品：无法再参与任何合成（与 Little Alchemy 2 的 Final Items 同义） */
+function isFinalElement(id) {
+  return getChildren(id).length === 0;
+}
+
 /** 某元素的全部配方（每对配方返回 [父A, 父B]） */
 function getRecipes(id) {
   const e = ELEMENTS_BY_ID[id];

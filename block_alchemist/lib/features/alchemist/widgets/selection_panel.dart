@@ -173,7 +173,12 @@ class SelectionPanel extends ConsumerWidget {
               if (unknownCount > 0)
                 InfoChip(text: '❓ 还有 $unknownCount 种未发现', locked: true),
               if (children.isEmpty)
-                const InfoChip(text: '暂无已知配方', locked: false),
+                InfoChip(
+                  text: childrenOf(def.id).isEmpty
+                      ? '🏁 最终物品，无法再参与合成'
+                      : '暂无已知配方',
+                  locked: false,
+                ),
             ],
           ),
           if (isDisaster) ...[
